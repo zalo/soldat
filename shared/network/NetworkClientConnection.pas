@@ -140,6 +140,7 @@ begin
   PlayerInfo.GameModChecksum := GameModChecksum;
   PlayerInfo.CustomModChecksum := CustomModChecksum;
 
+  {$IFDEF WEB}WriteLn('[NET] Sending PlayerInfo, team=', SelTeam, ' size=', sizeof(PlayerInfo));{$ENDIF}
   UDP.SendData(PlayerInfo, sizeof(PlayerInfo), k_nSteamNetworkingSend_Reliable);
   ClientPlayerSent := true;
   ClientPlayerReceivedCounter := CLIENTPLAYERRECIEVED_TIME;
@@ -399,10 +400,16 @@ begin
     ClientSendPlayerInfo
   else
   begin
+    {$IFDEF WEB}WriteLn('[NET] PlayersList: gamemode=', sv_gamemode.Value, ' auto-joining DM');{$ENDIF}
     if (sv_gamemode.Value = GAMESTYLE_DEATHMATCH) or
        (sv_gamemode.Value = GAMESTYLE_POINTMATCH) or
        (sv_gamemode.Value = GAMESTYLE_RAMBO) then
-      ClientSendPlayerInfo;
+      ClientSendPlayerInfo
+    {$IFDEF WEB}
+    else
+      WriteLn('[NET] PlayersList: NOT DM mode (', sv_gamemode.Value, '), showing team menu')
+    {$ENDIF}
+    ;
 
     if sv_gamemode.Value = GAMESTYLE_TEAMMATCH then
       GameMenuShow(TeamMenu);
