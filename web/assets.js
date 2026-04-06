@@ -2,7 +2,12 @@
 import { unzipSync } from './lib/fflate.js';
 import { get, set, del } from './lib/idb-keyval.js';
 
-const ASSET_VERSION = 'v0.4.1'; // bumped to invalidate corrupted caches
+const ASSET_VERSION = 'v0.4.2'; // bumped to invalidate 404-cached data
+// Try local path first, then external URL
+// Local works on dev servers (soldat.sels.tech, localhost:4000)
+// For PartyKit production, the smod must be hosted externally
+// Asset URL — works when smod is present on the same server
+// For PartyKit production, use soldat.sels.tech which has the smod
 const ASSET_URL = './soldat.smod';
 const SMOD_CACHE_KEY = 'soldat-smod-' + ASSET_VERSION;
 
@@ -20,6 +25,7 @@ export async function loadAssets(onProgress) {
     // Download with progress
     onProgress(0, 'Downloading assets...');
     const response = await fetch(ASSET_URL);
+    if (!response.ok) throw new Error(`Failed to download ${ASSET_URL}: ${response.status}`);
     const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10);
     const reader = response.body.getReader();
     const chunks = [];
