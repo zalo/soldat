@@ -61,12 +61,12 @@ export default class SoldatServer implements Party.Server {
           return 0;
         },
         fd_close: () => 0,
-        fd_fdstat_get: () => 0,
+        fd_fdstat_get: () => 8, // EBADF — no valid fds (prevents infinite loop in FPC RTL init)
         fd_fdstat_set_flags: () => 0,
-        fd_filestat_get: () => 0,
+        fd_filestat_get: () => 8,
         fd_filestat_set_size: () => 0,
         fd_filestat_set_times: () => 0,
-        fd_prestat_get: () => 8,
+        fd_prestat_get: () => 8, // EBADF — no preopened directories
         fd_prestat_dir_name: () => 8,
         fd_read: () => 0,
         fd_readdir: () => 0,
@@ -74,16 +74,18 @@ export default class SoldatServer implements Party.Server {
         fd_sync: () => 0,
         fd_tell: () => 0,
         fd_write: (fd: number, iovs: number, iovsLen: number, nwrittenPtr: number) => {
-          const dv = new DataView(this.memory.buffer);
-          let written = 0;
-          for (let i = 0; i < iovsLen; i++) {
-            const ptr = dv.getUint32(iovs + i * 8, true);
-            const len = dv.getUint32(iovs + i * 8 + 4, true);
-            console.log('[soldat-server]',
-              new TextDecoder().decode(new Uint8Array(this.memory.buffer, ptr, len)));
-            written += len;
-          }
-          dv.setUint32(nwrittenPtr, written, true);
+          try {
+            const dv = new DataView(this.memory.buffer);
+            let written = 0;
+            for (let i = 0; i < iovsLen; i++) {
+              const ptr = dv.getUint32(iovs + i * 8, true);
+              const len = dv.getUint32(iovs + i * 8 + 4, true);
+              console.log('[soldat-server]',
+                new TextDecoder().decode(new Uint8Array(this.memory.buffer, ptr, len)));
+              written += len;
+            }
+            dv.setUint32(nwrittenPtr, written, true);
+          } catch { /* memory may be detached during shutdown */ }
           return 0;
         },
         path_create_directory: () => 0,

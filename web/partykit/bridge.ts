@@ -103,5 +103,49 @@ export function createServerBridge(
     web_stop: () => {
       throw new Error('web_stop: server_init completed — game state preserved');
     },
+
+    // GNS/Steam stubs — must have correct return types for WASM
+    // Functions returning i64 MUST return BigInt, not number
+    GameNetworkingSockets_Kill: () => {},
+    SteamAPI_SteamNetworkingIPAddr_Clear: () => {},
+    SteamAPI_SteamNetworkingIPAddr_ParseString: () => 0,
+    SteamAPI_SteamNetworkingIPAddr_ToString: () => {},
+    SteamAPI_SteamNetworkingIdentity_Clear: () => {},
+    SteamAPI_SteamNetworkingIdentity_ToString: () => {},
+    SteamAPI_SteamNetworkingIdentity_ParseString: () => 0,
+    SteamAPI_SteamNetworkingIdentity_IsInvalid: () => 1,
+    SteamAPI_SteamNetworkingIdentity_GetSteamID64: () => BigInt(0),
+    SteamAPI_SteamNetworkingIdentity_SetSteamID64: () => {},
+    SteamAPI_SteamNetworkingIdentity_GetSteamID: () => {},
+    SteamAPI_SteamNetworkingIdentity_SetSteamID: () => {},
+    SteamAPI_SteamNetworkingMessage_t_Release: () => {},
+    SteamAPI_ISteamNetworkingSockets_CreateListenSocketIP: () => 1, // return valid handle
+    SteamAPI_ISteamNetworkingSockets_ConnectByIPAddress: () => 1,
+    SteamAPI_ISteamNetworkingSockets_AcceptConnection: () => 0,
+    SteamAPI_ISteamNetworkingSockets_CloseConnection: () => 1,
+    SteamAPI_ISteamNetworkingSockets_CloseListenSocket: () => 1,
+    SteamAPI_ISteamNetworkingSockets_SetConnectionUserData: () => 1,
+    SteamAPI_ISteamNetworkingSockets_GetConnectionUserData: () => BigInt(0),
+    SteamAPI_ISteamNetworkingSockets_SetConnectionName: () => {},
+    SteamAPI_ISteamNetworkingSockets_SendMessageToConnection: () => 0,
+    SteamAPI_ISteamNetworkingSockets_ReceiveMessagesOnConnection: () => 0,
+    SteamAPI_ISteamNetworkingSockets_ReceiveMessagesOnPollGroup: () => 0,
+    SteamAPI_ISteamNetworkingSockets_GetConnectionInfo: () => 0,
+    SteamAPI_ISteamNetworkingSockets_GetConnectionRealTimeStatus: () => 0,
+    SteamAPI_ISteamNetworkingSockets_GetListenSocketAddress: () => 0,
+    SteamAPI_ISteamNetworkingSockets_CreatePollGroup: () => 1, // return valid handle
+    SteamAPI_ISteamNetworkingSockets_DestroyPollGroup: () => 1,
+    SteamAPI_ISteamNetworkingSockets_SetConnectionPollGroup: () => 1,
+    SteamAPI_ISteamNetworkingSockets_RunCallbacks: () => {},
+    SteamAPI_ISteamNetworkingUtils_GetLocalTimestamp: () => BigInt(Date.now()) * BigInt(1000),
+    SteamAPI_ISteamNetworkingUtils_SetDebugOutputFunction: () => {},
+    SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32: () => 1,
+    SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueFloat: () => 1,
+    SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueString: () => 1,
+    SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_SteamNetConnectionStatusChanged: () => 1,
+    SteamAPI_ISteamNetworkingUtils_AllocateMessage: () => 0,
+
+    // ws_ stubs (server doesn't use client WebSocket)
+    ws_disconnect: () => {},
   };
 }
