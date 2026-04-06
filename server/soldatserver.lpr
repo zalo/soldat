@@ -51,8 +51,13 @@ procedure server_init(); cdecl; export;
 begin
   DefaultSystemCodePage := CP_UTF8;
   ActivateServer;
-  // Set Deathmatch mode for web (no team selection needed)
+  // Set Deathmatch mode and Arena map for web
   sv_gamemode.ParseAndSetValue('0');
+  // Ensure Arena is the first map (has DM spawn points)
+  if Assigned(MapsList) and (MapsList.Count > 0) then
+    MapsList[0] := 'Arena'
+  else if Assigned(MapsList) then
+    MapsList.Add('Arena');
   if ProgReady then
     StartServer;
 end;

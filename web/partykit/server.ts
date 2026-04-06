@@ -9,6 +9,7 @@ export default class SoldatServer implements Party.Server {
   wasm!: WebAssembly.Instance;
   memory!: WebAssembly.Memory;
   interval: ReturnType<typeof setInterval> | null = null;
+  _startTime: number = Date.now();
   connIdMap: Map<string, number> = new Map();
   nextConnId: number = 1;
 
@@ -80,8 +81,10 @@ export default class SoldatServer implements Party.Server {
         path_rename: () => 0,
         path_unlink_file: () => 0,
         clock_time_get: (id: number, precision: bigint, resultPtr: number) => {
-          // Return nanoseconds since epoch
-          const ns = BigInt(Date.now()) * BigInt(1000000);
+          // Return nanoseconds since process start (monotonic)
+          // Using epoch time causes GetTickCount64 overflow → Trunc crash
+          if (!this._startTime) this._startTime = Date.now();
+          const ns = BigInt(Date.now() - this._startTime) * BigInt(1000000);
           const dv = new DataView(memoryProxy.buffer);
           dv.setBigUint64(resultPtr, ns, true);
           return 0;
@@ -120,6 +123,10 @@ export default class SoldatServer implements Party.Server {
     });
     this.memory = this.wasm.exports.memory as WebAssembly.Memory;
     memoryRef = this.memory;
+    // Run a few ticks to initialize timing before any connections
+    for (let i = 0; i < 10; i++) {
+      try { (this.wasm.exports as any).server_tick(); } catch {}
+    }
     console.log('[soldat-server] WASM ready. Exports:', Object.keys(this.wasm.exports).filter(k => k.startsWith('server_') || k === 'alloc_buffer').join(', '));
   }
 
