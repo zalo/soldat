@@ -492,8 +492,10 @@ begin
       PlayersList.HairColor[i] := $FF000000 or Sprite[i].Player.HairColor;
       PlayersList.JetColor[i] := Sprite[i].Player.JetColor;
       PlayersList.Team[i] := Sprite[i].Player.Team;
-      PlayersList.PredDuration[i] := iif(Sprite[i].BonusStyle = BONUS_PREDATOR,
-        (Sprite[i].BonusTime / 60), 0);
+      if Sprite[i].BonusStyle = BONUS_PREDATOR then
+        PlayersList.PredDuration[i] := Round(Sprite[i].BonusTime / 60)
+      else
+        PlayersList.PredDuration[i] := 0;
 
       PlayersList.Look[i] := 0;
       if Sprite[i].Player.HairStyle = 1 then
