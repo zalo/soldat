@@ -125,45 +125,60 @@ export default class SoldatServer implements Party.Server {
     });
 
     // Instantiate WASM
-    // Note: In PartyKit deployment, soldatserver.wasm is imported as a module
-    // via the "file" loader. For local dev, we fetch it.
+    console.log('[soldat-server] Loading WASM...');
     let wasmModule: WebAssembly.Module;
     try {
-      // Try importing as bundled module (deployment)
       const mod = await import('./soldatserver.wasm');
       wasmModule = mod.default;
+      console.log('[soldat-server] WASM loaded via import');
     } catch {
-      // Fallback: fetch for local dev
-      const resp = await fetch('/soldatserver.wasm');
+      const resp = await fetch(`${origin}/partykit/soldatserver.wasm`);
+      if (!resp.ok) throw new Error(`Failed to fetch soldatserver.wasm: ${resp.status}`);
       wasmModule = await WebAssembly.compile(await resp.arrayBuffer());
+      console.log('[soldat-server] WASM loaded via fetch');
     }
 
-    this.wasm = new WebAssembly.Instance(wasmModule, {
-      ...wasi,
-      env: envProxy,
-    });
+    console.log('[soldat-server] Instantiating WASM...');
+    try {
+      const { instance } = await WebAssembly.instantiate(wasmModule, {
+        ...wasi,
+        env: envProxy,
+      });
+      this.wasm = instance;
+      console.log('[soldat-server] WASM instantiated OK');
+    } catch (e: any) {
+      console.error('[soldat-server] WASM instantiation FAILED:', e.message);
+      throw e;
+    }
     this.memory = this.wasm.exports.memory as WebAssembly.Memory;
     memoryRef = this.memory;
+    console.log('[soldat-server] WASM instantiated, calling _start...');
 
     // Initialize server game state
     // _start runs: RTL init → unit init → main block (server_init + web_stop throw)
     try {
       (this.wasm.exports as any)._start();
     } catch (e: any) {
-      if (e.message && (e.message.includes('web_stop') || e.message.includes('proc_exit'))) {
-        console.log('[soldat-server] Server initialized successfully');
+      if (e.message && (e.message.includes('web_stop') || e.message.includes('proc_exit') || e.message.includes('unreachable'))) {
+        console.log('[soldat-server] Server initialized (caught:', e.message.substring(0, 60), ')');
       } else {
+        console.error('[soldat-server] _start FAILED:', e.message);
         throw e;
       }
     }
+
+    console.log('[soldat-server] Server ready. Exports:', Object.keys(this.wasm.exports).filter(k => k.startsWith('server_') || k === 'alloc_buffer').join(', '));
   }
 
   async onConnect(conn: Party.Connection) {
     const connId = this.nextConnId++;
     this.connIdMap.set(conn.id, connId);
+    console.log(`[soldat-server] onConnect: connId=${connId}, partyId=${conn.id}`);
 
     if ((this.wasm.exports as any).server_on_connect) {
       (this.wasm.exports as any).server_on_connect(connId);
+    } else {
+      console.warn('[soldat-server] server_on_connect export not found!');
     }
 
     // Start game loop when first player connects
@@ -188,13 +203,18 @@ export default class SoldatServer implements Party.Server {
       bytes = new TextEncoder().encode(message);
     }
 
+    console.log(`[soldat-server] onMessage: connId=${connId}, ${bytes.length} bytes, MsgID=${bytes[0]}`);
     if ((this.wasm.exports as any).server_on_message) {
-      const alloc = (this.wasm.exports as any).wasiAlloc || (this.wasm.exports as any).alloc_buffer;
+      const alloc = (this.wasm.exports as any).alloc_buffer;
       if (alloc) {
         const ptr = alloc(bytes.length);
         new Uint8Array(this.memory.buffer).set(bytes, ptr);
         (this.wasm.exports as any).server_on_message(connId, ptr, bytes.length);
+      } else {
+        console.warn('[soldat-server] alloc_buffer export not found!');
       }
+    } else {
+      console.warn('[soldat-server] server_on_message export not found!');
     }
   }
 
