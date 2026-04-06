@@ -2,6 +2,8 @@
 import type * as Party from 'partykit/server';
 import { createServerBridge } from './bridge';
 import { unzipSync } from 'fflate';
+// @ts-ignore — imported as WebAssembly.Module by esbuild file loader
+import wasmModule from './soldatserver.wasm';
 
 export default class SoldatServer implements Party.Server {
   wasm!: WebAssembly.Instance;
@@ -110,38 +112,15 @@ export default class SoldatServer implements Party.Server {
       }
     });
 
-    // Instantiate WASM
-    console.log('[soldat-server] Loading WASM...');
-    let wasmModule: WebAssembly.Module;
-    try {
-      const mod = await import('./soldatserver.wasm');
-      wasmModule = mod.default;
-      console.log('[soldat-server] WASM loaded via import');
-    } catch {
-      const resp = await fetch(`${origin}/partykit/soldatserver.wasm`);
-      if (!resp.ok) throw new Error(`Failed to fetch soldatserver.wasm: ${resp.status}`);
-      wasmModule = await WebAssembly.compile(await resp.arrayBuffer());
-      console.log('[soldat-server] WASM loaded via fetch');
-    }
-
+    // Instantiate WASM — wasmModule imported as WebAssembly.Module at top of file
     console.log('[soldat-server] Instantiating WASM...');
-    try {
-      const { instance } = await WebAssembly.instantiate(wasmModule, {
-        ...wasi,
-        env: envProxy,
-      });
-      this.wasm = instance;
-      console.log('[soldat-server] WASM instantiated OK');
-    } catch (e: any) {
-      console.error('[soldat-server] WASM instantiation FAILED:', e?.message);
-      return; // Don't throw — let DO start without WASM
-    }
+    this.wasm = new WebAssembly.Instance(wasmModule, {
+      ...wasi,
+      env: envProxy,
+    });
     this.memory = this.wasm.exports.memory as WebAssembly.Memory;
     memoryRef = this.memory;
-    console.log('[soldat-server] WASM instantiated OK');
-    // NOTE: _start is deferred to first onConnect to avoid CPU time limits in onStart.
-
-    console.log('[soldat-server] Server ready. Exports:', Object.keys(this.wasm.exports).filter(k => k.startsWith('server_') || k === 'alloc_buffer').join(', '));
+    console.log('[soldat-server] WASM ready. Exports:', Object.keys(this.wasm.exports).filter(k => k.startsWith('server_') || k === 'alloc_buffer').join(', '));
   }
 
   initialized = false;
