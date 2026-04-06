@@ -699,6 +699,17 @@ async function main() {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  // Expose game state for testing/debugging
+  window._soldat = {
+    getMySprite: () => instance.exports.web_get_my_sprite?.() ?? -1,
+    getMapChangeCounter: () => instance.exports.web_get_map_change_counter?.() ?? 0,
+    getRequestingGame: () => instance.exports.web_get_requesting_game?.() ?? 0,
+    getConnectionState: () => instance.exports.web_get_connection_state?.() ?? 0,
+    joinRoom: joinRoom,
+    spawnOffline: () => instance.exports.web_spawn_offline?.(),
+    tickCount: () => tickCount,
+  };
 }
 
 main().catch((e) => {

@@ -1810,8 +1810,9 @@ var
 begin
   Player := TPlayer.Create;
   Player.Peer := HSteamNetConnection(ConnId);
-  Player.IP := '127.0.0.1';
-  Player.Port := 0;
+  // Unique IP per connection to avoid anti-flood blocking
+  Player.IP := '10.0.' + IntToStr((ConnId shr 8) and 255) + '.' + IntToStr(ConnId and 255);
+  Player.Port := ConnId;
   Players.Add(Player);
   WriteLn('[NET-Web] Player connected: connId=', ConnId);
 end;

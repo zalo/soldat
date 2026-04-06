@@ -208,15 +208,21 @@ export default class SoldatServer implements Party.Server {
     }
   }
 
+  outboundPtr: number = 0;
+
   private flushOutboundMessages() {
     const getOutbound = (this.wasm.exports as any).server_get_outbound;
     if (!getOutbound) return;
 
-    const alloc = (this.wasm.exports as any).wasiAlloc || (this.wasm.exports as any).alloc_buffer;
-    if (!alloc) return;
+    // Allocate once, reuse
+    if (!this.outboundPtr) {
+      const alloc = (this.wasm.exports as any).alloc_buffer;
+      if (!alloc) return;
+      this.outboundPtr = alloc(65536);
+    }
 
     const maxSize = 65536;
-    const outPtr = alloc(maxSize);
+    const outPtr = this.outboundPtr;
     const bytesWritten = getOutbound(outPtr, maxSize);
     if (bytesWritten <= 0) return;
 

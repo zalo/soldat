@@ -152,7 +152,31 @@ begin
   WriteLn('[web] Offline player spawned');
 end;
 
-exports web_init, web_tick, web_alloc, web_free, web_resize, join_room, web_spawn_offline;
+// Accessibility: query game state for automated testing
+function web_get_my_sprite(): LongInt; cdecl; export;
+begin
+  Result := MySprite;
+end;
+
+function web_get_map_change_counter(): LongInt; cdecl; export;
+begin
+  Result := MapChangeCounter;
+end;
+
+function web_get_requesting_game(): LongInt; cdecl; export;
+begin
+  Result := Ord(RequestingGame);
+end;
+
+function web_get_connection_state(): LongInt; cdecl; export;
+begin
+  if UDP = nil then Result := 0
+  else if UDP.Active then Result := 2
+  else Result := 1;
+end;
+
+exports web_init, web_tick, web_alloc, web_free, web_resize, join_room, web_spawn_offline,
+  web_get_my_sprite, web_get_map_change_counter, web_get_requesting_game, web_get_connection_state;
 {$ENDIF}
 
 begin
