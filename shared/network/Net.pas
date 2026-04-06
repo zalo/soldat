@@ -1171,8 +1171,10 @@ end;
 function TClientNetwork.Connect(Host: String; Port: Word): Boolean;
 {$IFDEF WEB}
 begin
-  Debug('Connecting to: ' + Host + ':' + IntToStr(Port));
-  Result := ws_connect(PChar(Host), PChar(IntToStr(Port)));
+  // On web, Host contains the room name. ws_connect(host, room) creates PartySocket.
+  // The PartyKit host URL is determined by the JS bridge (same origin).
+  Debug('[NET-Web] Connecting to room: ' + Host);
+  Result := ws_connect(PChar(''), PChar(Host));
 end;
 {$ELSE}
 var

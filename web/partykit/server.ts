@@ -69,7 +69,19 @@ export default class SoldatServer implements Party.Server {
         path_remove_directory: () => 0,
         path_rename: () => 0,
         path_unlink_file: () => 0,
-        proc_exit: (code: number) => { console.log('proc_exit(' + code + ')'); },
+        clock_time_get: (id: number, precision: bigint, resultPtr: number) => {
+          // Return nanoseconds since epoch
+          const ns = BigInt(Date.now()) * BigInt(1000000);
+          const dv = new DataView(this.memory.buffer);
+          dv.setBigUint64(resultPtr, ns, true);
+          return 0;
+        },
+        poll_oneoff: () => 0,
+        sched_yield: () => 0,
+        proc_exit: (code: number) => {
+          console.log('[soldat-server] proc_exit(' + code + ')');
+          throw new Error('web_stop: server_init completed');
+        },
         random_get: (bufPtr: number, bufLen: number) => {
           // Cloudflare Workers have crypto.getRandomValues
           const buf = new Uint8Array(this.memory.buffer, bufPtr, bufLen);
@@ -109,11 +121,15 @@ export default class SoldatServer implements Party.Server {
     memoryRef = this.memory;
 
     // Initialize server game state
-    if ((this.wasm.exports as any)._initialize) {
-      (this.wasm.exports as any)._initialize();
-    }
-    if ((this.wasm.exports as any).server_init) {
-      (this.wasm.exports as any).server_init();
+    // _start runs: RTL init → unit init → main block (server_init + web_stop throw)
+    try {
+      (this.wasm.exports as any)._start();
+    } catch (e: any) {
+      if (e.message && (e.message.includes('web_stop') || e.message.includes('proc_exit'))) {
+        console.log('[soldat-server] Server initialized successfully');
+      } else {
+        throw e;
+      }
     }
   }
 

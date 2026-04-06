@@ -1081,8 +1081,13 @@ begin
     Initing := 10;
 
   ServerIP := Trim(JoinIP);
+  {$IFDEF WEB}
+  // On web, JoinPort is the room name (not a number)
+  ServerPort := 0;
+  {$ELSE}
   if not TryStrToInt(Trim(JoinPort), ServerPort) then
     Exit;
+  {$ENDIF}
 
   InitGameGraphics();
   DoTextureLoading(True);
@@ -1097,6 +1102,24 @@ begin
   {$ENDIF}
 
   UDP := TClientNetwork.Create();
+
+  {$IFDEF WEB}
+  // On web, connect to the PartyKit room
+  RenderGameInfo(_('Connecting to room...'));
+  if UDP.Connect(ServerIP, ServerPort) then
+  begin
+    ProgReady := True;
+    GameLoopRun := True;
+    RenderGameInfo(_('Loading'));
+    ClientRequestGame;
+    // Don't call StartGameLoop — web_tick handles it
+  end
+  else
+  begin
+    RenderGameInfo(_('Connection failed.'));
+    Exit;
+  end;
+  {$ELSE}
   // DEMO
   if JoinPort = '0' then
   begin
@@ -1124,6 +1147,7 @@ begin
       Exit;
     end;
   end;
+  {$ENDIF} // WEB vs native JoinServer
 end;
 
 procedure ShowMessage(MessageText: AnsiString); overload;

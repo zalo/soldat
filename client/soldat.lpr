@@ -141,10 +141,10 @@ end;
 procedure join_room(roomPtr: PChar); cdecl; export;
 begin
   // Called from JS when user clicks Join or URL has #room=name
-  // The PartyKit host is set in the JS bridge; roomPtr is the room name
-  JoinIP := 'partykit'; // Signal to use WebSocket
-  JoinPort := String(roomPtr);
-  WriteLn('[web] Joining room: ', JoinPort);
+  // Set JoinIP to the room name — on web, Connect passes this to ws_connect
+  JoinIP := String(roomPtr);
+  JoinPort := '0'; // Numeric port required by JoinServer parser
+  WriteLn('[web] Joining room: ', JoinIP);
   JoinServer();
 end;
 

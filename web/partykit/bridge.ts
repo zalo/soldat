@@ -49,5 +49,10 @@ export function createServerBridge(
     },
 
     get_time_ms: (): number => Date.now(),
+
+    // web_stop: called from Pascal to abort _start cleanly
+    web_stop: () => {
+      throw new Error('web_stop: server_init completed — game state preserved');
+    },
   };
 }

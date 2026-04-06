@@ -2,14 +2,6 @@
   "name": "opensoldat",
   "main": "server.ts",
   "compatibilityDate": "2024-12-06",
-  "serve": {
-    "path": "..",
-    "singlePageApp": true,
-    "build": {
-      "entry": "../main.js",
-      "loader": {
-        ".wasm": "file"
-      }
-    }
-  }
+  "port": 1999,
+  "serve": ".."
 }

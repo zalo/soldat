@@ -1,6 +1,6 @@
 // web/assets.js — Download, unzip, cache, and pre-decode image assets
-import { unzipSync } from 'fflate';
-import { get, set } from 'idb-keyval';
+import { unzipSync } from './lib/fflate.js';
+import { get, set } from './lib/idb-keyval.js';
 
 const ASSET_VERSION = 'v0.4';
 const ASSET_URL = './soldat.smod';

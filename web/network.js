@@ -1,5 +1,5 @@
 // web/network.js — WebSocket networking via PartySocket + room URL management
-import PartySocket from 'partysocket';
+import PartySocket from './lib/partysocket.js';
 
 export function createNetworkBridge(memory) {
   let socket = null;
@@ -19,7 +19,10 @@ export function createNetworkBridge(memory) {
       const room = readString(roomPtr);
       connectionState = 1;
 
-      socket = new PartySocket({ host, room });
+      // Use current page host if none specified (for PartyKit dev server)
+      const effectiveHost = host || window.location.host;
+      console.log(`[ws] Connecting to PartyKit room "${room}" at host "${effectiveHost}"`);
+      socket = new PartySocket({ host: effectiveHost, room });
       socket.binaryType = 'arraybuffer';
 
       socket.addEventListener('open', () => {
