@@ -252,4 +252,25 @@ export default class SoldatServer implements Party.Server {
       }
     }
   }
+
+  // HTTP request handler — proxy smod download from GitHub with CORS
+  async onRequest(req: Party.Request) {
+    const url = new URL(req.url);
+    if (url.pathname === '/parties/main/assets/soldat.smod' || url.pathname.endsWith('/soldat.smod')) {
+      const ghUrl = 'https://github.com/opensoldat/base/releases/download/v0.4/soldat.smod';
+      const upstream = await fetch(ghUrl, { redirect: 'follow' });
+      if (!upstream.ok) {
+        return new Response('Failed to fetch smod', { status: 502 });
+      }
+      return new Response(upstream.body, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': upstream.headers.get('Content-Length') || '',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+    return new Response('Not found', { status: 404 });
+  }
 }

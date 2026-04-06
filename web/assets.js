@@ -2,13 +2,13 @@
 import { unzipSync } from './lib/fflate.js';
 import { get, set, del } from './lib/idb-keyval.js';
 
-const ASSET_VERSION = 'v0.4.2'; // bumped to invalidate 404-cached data
+const ASSET_VERSION = 'v0.4.3'; // proxy support
 // Try local path first, then external URL
 // Local works on dev servers (soldat.sels.tech, localhost:4000)
 // For PartyKit production, the smod must be hosted externally
-// Asset URL — works when smod is present on the same server
-// For PartyKit production, use soldat.sels.tech which has the smod
-const ASSET_URL = './soldat.smod';
+// Try local smod first, then PartyKit proxy (streams from GitHub releases)
+const ASSET_URL_LOCAL = './soldat.smod';
+const ASSET_URL_PROXY = '/parties/main/assets/soldat.smod';
 const SMOD_CACHE_KEY = 'soldat-smod-' + ASSET_VERSION;
 
 const IMAGE_EXTENSIONS = ['.png', '.bmp', '.jpg', '.jpeg', '.gif'];
@@ -22,10 +22,14 @@ export async function loadAssets(onProgress) {
     onProgress(0.5, 'Loading from cache...');
     smodBytes = new Uint8Array(cached);
   } else {
-    // Download with progress
+    // Download with progress — try local first, then proxy
     onProgress(0, 'Downloading assets...');
-    const response = await fetch(ASSET_URL);
-    if (!response.ok) throw new Error(`Failed to download ${ASSET_URL}: ${response.status}`);
+    let response = await fetch(ASSET_URL_LOCAL).catch(() => null);
+    if (!response || !response.ok) {
+      onProgress(0, 'Downloading from server...');
+      response = await fetch(ASSET_URL_PROXY);
+    }
+    if (!response.ok) throw new Error(`Failed to download smod: ${response.status}`);
     const contentLength = parseInt(response.headers.get('Content-Length') || '0', 10);
     const reader = response.body.getReader();
     const chunks = [];
