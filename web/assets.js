@@ -1,8 +1,8 @@
 // web/assets.js — Download, unzip, cache, and pre-decode image assets
 import { unzipSync } from './lib/fflate.js';
-import { get, set } from './lib/idb-keyval.js';
+import { get, set, del } from './lib/idb-keyval.js';
 
-const ASSET_VERSION = 'v0.4';
+const ASSET_VERSION = 'v0.4.1'; // bumped to invalidate corrupted caches
 const ASSET_URL = './soldat.smod';
 const SMOD_CACHE_KEY = 'soldat-smod-' + ASSET_VERSION;
 
@@ -51,9 +51,26 @@ export async function loadAssets(onProgress) {
     }
   }
 
-  // Unzip
+  // Unzip — with cache recovery on corruption
   onProgress(0.6, 'Extracting assets...');
-  const files = unzipSync(smodBytes);
+  let files;
+  try {
+    files = unzipSync(smodBytes);
+  } catch (e) {
+    if (cached) {
+      // Cached data is corrupted — clear and re-download
+      console.warn('Cached smod corrupted, re-downloading:', e.message);
+      await del(SMOD_CACHE_KEY).catch(() => {});
+      onProgress(0, 'Cache invalid, re-downloading...');
+      const response = await fetch(ASSET_URL);
+      smodBytes = new Uint8Array(await response.arrayBuffer());
+      onProgress(0.55, 'Caching fresh download...');
+      try { await set(SMOD_CACHE_KEY, smodBytes.buffer); } catch {}
+      files = unzipSync(smodBytes);
+    } else {
+      throw e;
+    }
+  }
 
   // Build file map
   const fileMap = new Map();
