@@ -94,10 +94,11 @@ exports
 
 begin
   {$IFDEF WEB}
-  WriteLn('[main] Reached main block');
+  DefaultSystemCodePage := CP_UTF8;
   server_init;
-  WriteLn('[main] server_init done, calling web_stop');
-  web_stop;
+  // Don't call web_stop — let Halt(0) run naturally.
+  // proc_exit returns (doesn't throw), then WASM hits unreachable,
+  // which is caught by the JS caller's try/catch.
   {$ELSE}
   {$IFDEF AUTOUPDATER}
   StartAutoUpdater;

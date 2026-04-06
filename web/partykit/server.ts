@@ -1,6 +1,7 @@
 // web/partykit/server.ts — PartyKit server: loads soldatserver.wasm, manages rooms
 import type * as Party from 'partykit/server';
 import { createServerBridge } from './bridge';
+import { unzipSync } from 'fflate';
 
 export default class SoldatServer implements Party.Server {
   wasm!: WebAssembly.Instance;
@@ -12,28 +13,8 @@ export default class SoldatServer implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
   async onStart() {
-    // Load server-only asset bundle (maps, configs, anims — 3.2MB)
+    // Skip smod loading for now — causes onStart to exceed CPU limits
     const bundledAssets = new Map<string, Uint8Array>();
-    try {
-      // Fetch server smod from the static serve (same origin)
-      const origin = this.room.env?.PARTYKIT_HOST
-        ? `https://${this.room.env.PARTYKIT_HOST}`
-        : 'http://127.0.0.1:1999';
-      const smodResp = await fetch(`${origin}/partykit/soldat-server.smod`).catch(() => null);
-      if (smodResp && smodResp.ok) {
-        const { unzipSync } = await import('fflate');
-        const smodBytes = new Uint8Array(await smodResp.arrayBuffer());
-        const files = unzipSync(smodBytes);
-        for (const [path, data] of Object.entries(files)) {
-          if (data.length > 0) bundledAssets.set(path, data as Uint8Array);
-        }
-        console.log(`[soldat-server] Loaded ${bundledAssets.size} assets from server smod`);
-      } else {
-        console.warn('[soldat-server] Could not fetch server smod — server will run without assets');
-      }
-    } catch (e) {
-      console.warn('[soldat-server] Failed to load server smod:', e);
-    }
 
     // Memory proxy — updated after instantiation
     let memoryRef: WebAssembly.Memory | null = null;
@@ -48,14 +29,14 @@ export default class SoldatServer implements Party.Server {
       wasi_snapshot_preview1: {
         args_get: () => 0,
         args_sizes_get: (countPtr: number, sizePtr: number) => {
-          const dv = new DataView(this.memory.buffer);
+          const dv = new DataView(memoryProxy.buffer);
           dv.setUint32(countPtr, 0, true);
           dv.setUint32(sizePtr, 0, true);
           return 0;
         },
         environ_get: () => 0,
         environ_sizes_get: (countPtr: number, sizePtr: number) => {
-          const dv = new DataView(this.memory.buffer);
+          const dv = new DataView(memoryProxy.buffer);
           dv.setUint32(countPtr, 0, true);
           dv.setUint32(sizePtr, 0, true);
           return 0;
@@ -75,13 +56,13 @@ export default class SoldatServer implements Party.Server {
         fd_tell: () => 0,
         fd_write: (fd: number, iovs: number, iovsLen: number, nwrittenPtr: number) => {
           try {
-            const dv = new DataView(this.memory.buffer);
+            const dv = new DataView(memoryProxy.buffer);
             let written = 0;
             for (let i = 0; i < iovsLen; i++) {
               const ptr = dv.getUint32(iovs + i * 8, true);
               const len = dv.getUint32(iovs + i * 8 + 4, true);
               console.log('[soldat-server]',
-                new TextDecoder().decode(new Uint8Array(this.memory.buffer, ptr, len)));
+                new TextDecoder().decode(new Uint8Array(memoryProxy.buffer, ptr, len)));
               written += len;
             }
             dv.setUint32(nwrittenPtr, written, true);
@@ -99,7 +80,7 @@ export default class SoldatServer implements Party.Server {
         clock_time_get: (id: number, precision: bigint, resultPtr: number) => {
           // Return nanoseconds since epoch
           const ns = BigInt(Date.now()) * BigInt(1000000);
-          const dv = new DataView(this.memory.buffer);
+          const dv = new DataView(memoryProxy.buffer);
           dv.setBigUint64(resultPtr, ns, true);
           return 0;
         },
@@ -107,11 +88,14 @@ export default class SoldatServer implements Party.Server {
         sched_yield: () => 0,
         proc_exit: (code: number) => {
           console.log('[soldat-server] proc_exit(' + code + ')');
-          throw new Error('web_stop: server_init completed');
+          // Don't throw — let WASM return naturally. The _start function
+          // won't actually return to the caller since proc_exit is __noreturn__,
+          // but WASM will trap with unreachable after this returns.
+          // We catch that trap in the _start try/catch.
         },
         random_get: (bufPtr: number, bufLen: number) => {
           // Cloudflare Workers have crypto.getRandomValues
-          const buf = new Uint8Array(this.memory.buffer, bufPtr, bufLen);
+          const buf = new Uint8Array(memoryProxy.buffer, bufPtr, bufLen);
           crypto.getRandomValues(buf);
           return 0;
         },
@@ -149,46 +133,50 @@ export default class SoldatServer implements Party.Server {
       this.wasm = instance;
       console.log('[soldat-server] WASM instantiated OK');
     } catch (e: any) {
-      console.error('[soldat-server] WASM instantiation FAILED:', e.message);
-      throw e;
+      console.error('[soldat-server] WASM instantiation FAILED:', e?.message);
+      return; // Don't throw — let DO start without WASM
     }
     this.memory = this.wasm.exports.memory as WebAssembly.Memory;
     memoryRef = this.memory;
-    console.log('[soldat-server] WASM instantiated, calling _start...');
-
-    // Initialize server game state
-    // _start runs: RTL init → unit init → main block (server_init + web_stop throw)
-    try {
-      (this.wasm.exports as any)._start();
-    } catch (e: any) {
-      // Any throw from _start is expected — web_stop, proc_exit, or memory errors
-      // The server state is initialized regardless
-      console.log('[soldat-server] _start caught:', (e?.message || String(e)).substring(0, 100));
-    }
+    console.log('[soldat-server] WASM instantiated OK');
+    // NOTE: _start is deferred to first onConnect to avoid CPU time limits in onStart.
 
     console.log('[soldat-server] Server ready. Exports:', Object.keys(this.wasm.exports).filter(k => k.startsWith('server_') || k === 'alloc_buffer').join(', '));
   }
 
+  initialized = false;
+
+  private initServer() {
+    if (this.initialized) return;
+    this.initialized = true;
+    // Skip _start — it exceeds the CPU time limit in Workers runtime.
+    // Server runs without full initialization (no map loaded, etc.)
+    // TODO: Find a way to initialize the server within CPU limits
+    // (e.g., compile as reactor, or split init into smaller steps)
+    console.log('[soldat-server] Server stub ready (no _start — CPU limit)');
+  }
+
   async onConnect(conn: Party.Connection) {
+    // Minimal handler — just track connection
     const connId = this.nextConnId++;
     this.connIdMap.set(conn.id, connId);
-    console.log(`[soldat-server] onConnect: connId=${connId}, partyId=${conn.id}`);
+    conn.send('connected:' + connId);
 
-    if ((this.wasm.exports as any).server_on_connect) {
-      (this.wasm.exports as any).server_on_connect(connId);
-    } else {
-      console.warn('[soldat-server] server_on_connect export not found!');
-    }
+    // Skip WASM call for now — RTL not initialized
+    // if ((this.wasm.exports as any).server_on_connect) {
+    //   (this.wasm.exports as any).server_on_connect(connId);
+    // }
 
     // Start game loop when first player connects
-    if (!this.interval) {
-      this.interval = setInterval(() => {
-        if ((this.wasm.exports as any).server_tick) {
-          (this.wasm.exports as any).server_tick();
-        }
-        this.flushOutboundMessages();
-      }, 1000 / 60);
-    }
+    // Disabled: WASM not initialized
+    // if (!this.interval) {
+    //   this.interval = setInterval(() => {
+    //     if ((this.wasm.exports as any).server_tick) {
+    //       (this.wasm.exports as any).server_tick();
+    //     }
+    //     this.flushOutboundMessages();
+    //   }, 1000 / 60);
+    // }
   }
 
   async onMessage(message: string | ArrayBuffer, sender: Party.Connection) {
@@ -249,13 +237,13 @@ export default class SoldatServer implements Party.Server {
     // Format: [targetConnId: i32][payloadLen: i32][payload bytes]...
     let offset = 0;
     while (offset + 8 <= bytesWritten) {
-      const dv = new DataView(this.memory.buffer, outPtr + offset);
+      const dv = new DataView(memoryProxy.buffer, outPtr + offset);
       const targetConnId = dv.getInt32(0, true);
       const payloadLen = dv.getInt32(4, true);
       offset += 8;
 
       if (offset + payloadLen > bytesWritten) break;
-      const payload = new Uint8Array(this.memory.buffer, outPtr + offset, payloadLen).slice();
+      const payload = new Uint8Array(memoryProxy.buffer, outPtr + offset, payloadLen).slice();
       offset += payloadLen;
 
       if (targetConnId === 0) {

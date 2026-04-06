@@ -3,5 +3,10 @@
   "main": "server.ts",
   "compatibilityDate": "2024-12-06",
   "port": 1999,
-  "serve": ".."
+  "serve": "..",
+  "build": {
+    "loader": {
+      ".wasm": "file"
+    }
+  }
 }
