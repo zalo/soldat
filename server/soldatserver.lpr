@@ -15,7 +15,9 @@ program soldatserver;
 
 uses
   {$IFNDEF WINDOWS}
-  cthreads, // needs to be first included unit in project
+  {$IFNDEF WEB}
+  cthreads, // needs to be first included unit in project — skip on WASM (no threads)
+  {$ENDIF}
   {$ENDIF}
   {$IFDEF AUTOUPDATER}
   AutoUpdater,
@@ -92,7 +94,9 @@ exports
 
 begin
   {$IFDEF WEB}
+  WriteLn('[main] Reached main block');
   server_init;
+  WriteLn('[main] server_init done, calling web_stop');
   web_stop;
   {$ELSE}
   {$IFDEF AUTOUPDATER}
