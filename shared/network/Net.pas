@@ -1086,6 +1086,9 @@ begin
   begin
     if BytesRead >= SizeOf(TMsgHeader) then
     begin
+      {$IFDEF WEB}
+      WriteLn('[NET] Recv MsgID=', RecvBuf[0], ' size=', BytesRead);
+      {$ENDIF}
       FillChar(FakeMsg, SizeOf(FakeMsg), 0);
       FakeMsg.m_pData := @RecvBuf[0];
       FakeMsg.m_cbSize := BytesRead;
