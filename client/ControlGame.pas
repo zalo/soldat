@@ -14,6 +14,12 @@ uses
   {$IFDEF STEAM} Steam, {$ENDIF}
   Client, Sprites, ClientGame, Command, Cvar;
 
+{$IFDEF WEB}
+var
+  WebMouseWasDown: Boolean = False;
+  WebEscWasDown: Boolean = False;
+{$ENDIF}
+
 procedure ClearChatText;
 begin
   ChatText := '';
@@ -696,7 +702,65 @@ var
   Event: TSDL_Event;
   Str: WideString;
   ChatEnabled: Boolean;
+  {$IFDEF WEB}
+  i: Integer;
+  Bind: PBind;
+  {$ENDIF}
 begin
+  {$IFDEF WEB}
+  // On web, keyboard state is written directly to KeyStatus by JS bridge.
+  // We process mouse delta, touch sticks, menu clicks, and escape key.
+
+  // Apply mouse delta to mx/my (desktop PointerLock)
+  if (WebMouseDelta.x <> 0) or (WebMouseDelta.y <> 0) then
+  begin
+    mx := Max(0, Min(GameWidth, mx + WebMouseDelta.x * cl_sensitivity.Value));
+    my := Max(0, Min(GameHeight, my + WebMouseDelta.y * cl_sensitivity.Value));
+    WebMouseDelta.x := 0;
+    WebMouseDelta.y := 0;
+    GameMenuMouseMove();
+  end;
+
+  // Apply mobile touch joysticks to key bindings
+  // Move stick (left joystick) → movement + jump
+  if (WebMoveStick.x <> 0) or (WebMoveStick.y <> 0) then
+  begin
+    KeyStatus[$04] := KeyStatus[$04] or (WebMoveStick.x < -30); // A = left
+    KeyStatus[$07] := KeyStatus[$07] or (WebMoveStick.x > 30);  // D = right
+    KeyStatus[$1A] := KeyStatus[$1A] or (WebMoveStick.y < -50); // W = jump (stick up)
+    KeyStatus[$16] := KeyStatus[$16] or (WebMoveStick.y > 30);  // S = crouch (stick down)
+  end;
+  // Aim stick (right joystick) → cursor position for aiming
+  if (WebAimStick.x <> 0) or (WebAimStick.y <> 0) then
+  begin
+    mx := Max(0, Min(GameWidth, mx + WebAimStick.x * 0.15));
+    my := Max(0, Min(GameHeight, my + WebAimStick.y * 0.15));
+  end;
+
+  // Handle mouse button press for menu clicks
+  // KeyStatus[301] = left mouse button (300 + SDL_BUTTON_LEFT)
+  if KeyStatus[301] and (not WebMouseWasDown) then
+  begin
+    WebMouseWasDown := True;
+    // Try menu click first; if not consumed, the bind system handles fire
+    GameMenuClick();
+  end
+  else if not KeyStatus[301] then
+    WebMouseWasDown := False;
+
+  // Handle escape key for menu toggle
+  if KeyStatus[$29] and (not WebEscWasDown) then // SDL_SCANCODE_ESCAPE
+  begin
+    WebEscWasDown := True;
+    if not EscMenu.Active then
+      GameMenuShow(EscMenu, True)
+    else
+      GameMenuShow(EscMenu, False);
+  end
+  else if not KeyStatus[$29] then
+    WebEscWasDown := False;
+
+  {$ELSE}
   Event := Default(TSDL_Event);
   ChatEnabled := Length(ChatText) > 0;
 
@@ -765,6 +829,7 @@ begin
       end;
     end;
   end;
+  {$ENDIF}
 end;
 
 end.

@@ -44,6 +44,11 @@ var
   Binds: array of TBind;
   GameWindow : PSDL_Window;
   GameGLContext: TSDL_GLContext;
+  {$IFDEF WEB}
+  WebMouseDelta: record x, y: Single; end;
+  WebMoveStick: record x, y: ShortInt; end;
+  WebAimStick: record x, y: ShortInt; end;
+  {$ENDIF}
 
 implementation
 
@@ -114,10 +119,25 @@ begin
   SetLength(Binds, 0);
 end;
 
+{$IFDEF WEB}
+procedure input_set_pointers(keyState, mouseDelta, moveStick, aimStick: Pointer); cdecl; external 'env';
+{$ENDIF}
+
 procedure StartInput;
 begin
+  {$IFDEF WEB}
+  // Connect JS input bridge to Pascal memory
+  FillChar(KeyStatus, SizeOf(KeyStatus), 0);
+  FillChar(WebMouseDelta, SizeOf(WebMouseDelta), 0);
+  FillChar(WebMoveStick, SizeOf(WebMoveStick), 0);
+  FillChar(WebAimStick, SizeOf(WebAimStick), 0);
+  input_set_pointers(@KeyStatus[0], @WebMouseDelta, @WebMoveStick, @WebAimStick);
+  WriteLn('[Input] Pointers set: KeyStatus=', PtrUInt(@KeyStatus[0]),
+    ' MouseDelta=', PtrUInt(@WebMouseDelta));
+  {$ELSE}
   SDL_SetRelativeMouseMode(SDL_TRUE);
   SDL_StopTextInput;
+  {$ENDIF}
 end;
 
 end.

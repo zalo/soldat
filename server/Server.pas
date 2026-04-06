@@ -544,8 +544,10 @@ begin
   WriteLn('');
 
   {$IFNDEF CPUARM}
+  {$IFNDEF CPUWASM32}
   // Disable FPU exceptions
   Set8087CW($133F);
+  {$ENDIF}
   {$ENDIF}
 
   DefaultFormatSettings.DecimalSeparator := '.';

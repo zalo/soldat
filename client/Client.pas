@@ -43,7 +43,8 @@ uses
   // soldat units
   Sprites, Anims, PolyMap, Net, LogFile, Sound, GetText,
   NetworkClientConnection, GameMenus, Demo, Console,
-  Weapons, Constants, Game, GameRendering;
+  Weapons, Constants, Game, GameRendering
+  {$IFDEF WEB}, Things, Parts{$ENDIF};
 
 procedure JoinServer;
 procedure StartGame;
@@ -296,7 +297,9 @@ var
   CameraX, CameraY: Single;  // camera x and y within world
   CameraFollowSprite: Byte;  // Tag number of object to follow
 
+  {$IFNDEF WEB}
   DownloadThread: TDownloadThread;
+  {$ENDIF}
   {$IFDEF STEAM}
   SteamAPI: TSteam;
   //SteamCallbacks: TSteamCallbacks;
@@ -565,6 +568,74 @@ end;
 
 {$ENDIF}
 
+{$IFDEF WEB}
+procedure WebSetDefaultBindings();
+begin
+  // Default key bindings for web (client.cfg doesn't exist on WASM filesystem)
+  BindKey('a', '+left', '', KM_NONE);
+  BindKey('d', '+right', '', KM_NONE);
+  BindKey('w', '+jump', '', KM_NONE);
+  BindKey('s', '+crouch', '', KM_NONE);
+  BindKey('space', '+jet', '', KM_NONE);
+  BindKey('r', '+reload', '', KM_NONE);
+  BindKey('q', '+changeweapon', '', KM_NONE);
+  BindKey('e', '+throwweapon', '', KM_NONE);
+  BindKey('g', '+throwgrenade', '', KM_NONE);
+  BindKey('mouse1', '+fire', '', KM_NONE);
+  BindKey('mouse3', '+jet', '', KM_NONE);
+end;
+
+procedure WebLoadDefaultMap();
+var
+  WebMapInfo: TMapInfo;
+  SpawnPos: TVector2;
+begin
+  WebMapInfo := Default(TMapInfo);
+  if not GetMapInfo('Arena', '', WebMapInfo) then
+  begin
+    WriteLn('[web] GetMapInfo FAILED');
+    Exit;
+  end;
+
+  if not Map.LoadMap(WebMapInfo, r_forcebg.Value, r_forcebg_color1.Value, r_forcebg_color2.Value) then
+  begin
+    WriteLn('[web] LoadMap FAILED');
+    Exit;
+  end;
+
+  // Set default key bindings
+  WebSetDefaultBindings();
+
+  // Create default weapons (ensure weapon data is available)
+  CreateDefaultWeapons(False);
+
+  // Spawn a local player
+  SpawnPos := Default(TVector2);
+  SpawnPos.x := 400;
+  SpawnPos.y := 200;
+  // Try to get a real spawn point
+  RandomizeStart(SpawnPos, 0);
+
+  Sprite[1].Player.Name := 'Player';
+  Sprite[1].Player.Team := 0;
+  Sprite[1].Player.ControlMethod := HUMAN;
+  CreateSprite(SpawnPos, Default(TVector2), 1, 1, Sprite[1].Player, False);
+
+  // Assign as our sprite
+  MySprite := 1;
+  CameraFollowSprite := 1;
+
+  // Give weapons - Desert Eagles primary, Colt secondary
+  Sprite[1].ApplyWeaponByNum(Guns[EAGLE].Num, 1);
+  Sprite[1].ApplyWeaponByNum(Guns[COLT].Num, 2);
+
+  // Set game state to playing
+  MapChangeCounter := -60;
+
+  WriteLn('[web] Player spawned at (', Round(SpawnPos.x), ',', Round(SpawnPos.y), ')');
+end;
+{$ENDIF}
+
 procedure StartGame();
 var
   ini: TMemINIFile;
@@ -604,6 +675,7 @@ begin
   Debug('[FS] UserDirectory: ' + UserDirectory);
   Debug('[FS] BaseDirectory: ' + BaseDirectory);
 
+  {$IFNDEF WEB}
   // Create the basic folder structure
   CreateDirIfMissing(UserDirectory + '/configs');
   CreateDirIfMissing(UserDirectory + '/screens');
@@ -614,6 +686,7 @@ begin
   CreateDirIfMissing(UserDirectory + '/mods');
 
   NewLogFiles;
+  {$ENDIF}
 
   MainConsole.CountMax := Round(15 * _rscala.y);
   MainConsole.ScrollTickMax := 150;
@@ -680,7 +753,9 @@ begin
       ShowMessage(_('Could not load base game archive (soldat.smod). Try to reinstall the game.'));
       Exit;
     end;
+    {$IFNDEF WEB}
     GameModChecksum := Sha1File(BaseDirectory + '/soldat.smod', 4096);
+    {$ENDIF}
   end;
 
   ModDir := '';
@@ -699,7 +774,9 @@ begin
       Exit;
     end;
     ModDir := 'mods/' + LowerCase(fs_mod.Value) + '/';
+    {$IFNDEF WEB}
     CustomModChecksum := Sha1File(UserDirectory + 'mods/' + LowerCase(fs_mod.Value) + '.smod', 4096);
+    {$ENDIF}
   end;
 
   {$IFDEF STEAM}
@@ -707,10 +784,14 @@ begin
     LoadWorkshopInterfaceArchives;
   {$ENDIF}
 
+  {$IFNDEF WEB}
   LoadInterfaceArchives(UserDirectory + 'custom-interfaces/');
+  {$ENDIF}
 
+  {$IFNDEF WEB}
   PHYSFS_CopyFileFromArchive('configs/client.cfg', UserDirectory + '/configs/client.cfg');
   PHYSFS_CopyFileFromArchive('configs/taunts.cfg', UserDirectory + '/configs/taunts.cfg');
+  {$ENDIF}
 
   LoadConfig('client.cfg');
 
@@ -829,7 +910,6 @@ begin
   end;
 
   WindowReady := True;
-
   if cl_lang.Value <> '' then
   begin
     SystemLang := cl_lang.Value;
@@ -864,8 +944,11 @@ begin
   if MainConsole.CountMax > 254 then
     MainConsole.CountMax := 254;
 
-  BigConsole.CountMax := Floor((0.85 * RenderHeight) /
-    (font_consolelineheight.Value * FontStyleSize(FONT_SMALL)));
+  if FontStyleSize(FONT_SMALL) > 0 then
+    BigConsole.CountMax := Floor((0.85 * RenderHeight) /
+      (font_consolelineheight.Value * FontStyleSize(FONT_SMALL)))
+  else
+    BigConsole.CountMax := 20;
   BigConsole.ScrollTickMax := 1500000;
   BigConsole.NewMessageWait := 0;
   BigConsole.AlphaCount := 255;
@@ -924,8 +1007,14 @@ begin
   if r_compatibility.Value then
     cl_actionsnap.SetValue(False);
 
+  {$IFNDEF WEB}
   WriteLogFile(GameLog, ConsoleLogFileName);
+  {$ENDIF}
   RunDeferredCommands();
+
+  {$IFDEF WEB}
+  WebLoadDefaultMap();
+  {$ENDIF}
 end;
 
 procedure ShutDown;

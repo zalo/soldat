@@ -22,6 +22,9 @@ uses
 {$ENDIF}
 
 const
+  {$IFDEF WEB}
+  STEAMLIB = 'env';
+  {$ELSE}
   {$IFDEF STEAM}
   {$IFDEF WINDOWS}
   {$IFDEF CPUX86_64}
@@ -45,6 +48,7 @@ const
   {$ENDIF}
   {$IFDEF LINUX}
   STEAMLIB = 'libGameNetworkingSockets.so';
+  {$ENDIF}
   {$ENDIF}
   {$ENDIF}
 

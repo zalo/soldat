@@ -180,6 +180,7 @@ function GfxFramebufferSupported(): Boolean;
 function GfxInitContext(Wnd: Pointer; Dithering, FixedPipeline: Boolean): Boolean;
 procedure GfxDestroyContext;
 procedure GfxPresent(Finish: Boolean);
+{$IFDEF WEB}procedure GfxFlushErrors;{$ENDIF}
 procedure GfxTarget(RenderTarget: TGfxTexture);
 procedure GfxBlit(Src, Dst: TGfxTexture; SrcRect, DstRect: TRect; filter: TGfxTextureFilter);
 procedure GfxClear(r, g, b, a: Byte); overload;
@@ -499,7 +500,11 @@ end;
 
 function GfxFramebufferSupported(): Boolean;
 begin
+  {$IFDEF WEB}
+  Result := True; // All GL functions are always available as WASM imports
+  {$ELSE}
   Result := Assigned(glGenFramebuffers) and Assigned(glBlitFramebuffer);
+  {$ENDIF}
 end;
 
 function InitShaderProgram(Dithering: Boolean): Boolean;
@@ -556,6 +561,9 @@ var
 begin
   Result := False;
 
+  {$IFDEF WEB}
+  RequiredFunctions := True;
+  {$ELSE}
   RequiredFunctions :=
     Assigned(glCreateShader)            and
     Assigned(glShaderSource)            and
@@ -576,6 +584,7 @@ begin
     Assigned(glVertexAttribPointer)     and
     Assigned(glBindAttribLocation)      and
     Assigned(glActiveTexture);
+  {$ENDIF}
 
   if not RequiredFunctions then
     Exit;
@@ -662,11 +671,18 @@ function GfxInitContext(Wnd: Pointer; Dithering, FixedPipeline: Boolean): Boolea
 var
   i: Integer;
   Color: TGfxColor;
+  {$IFNDEF WEB}
   Version: string;
+  {$ENDIF}
   RequiredFunctions: Boolean;
 begin
   Result := True;
 
+  {$IFDEF WEB}
+  // On web, GL context is created by JS bridge. GL functions are WASM imports.
+  // Skip SDL/dglOpenGL initialization entirely.
+  RequiredFunctions := True;
+  {$ELSE}
   GameGLContext := SDL_GL_CreateContext(Wnd);
   InitOpenGL();
   ReadImplementationProperties();
@@ -714,6 +730,7 @@ begin
     Assigned(glReadPixels)     and
     Assigned(glTexEnvf)        and
     Assigned(glGetIntegerv);
+  {$ENDIF} // not WEB
 
   if not RequiredFunctions then
   begin
@@ -722,23 +739,38 @@ begin
     Exit;
   end;
 
+  {$IFDEF WEB}
+  // WebGL2 requires shaders — no fixed pipeline fallback
+  FixedPipeline := False;
+  {$ENDIF}
+
   if not FixedPipeline then
   begin
     if InitShaderProgram(Dithering) = False then
     begin
+      {$IFNDEF WEB}
       GfxLog('Falling back to OpenGL fixed pipeline.');
       FixedPipeline := True;
+      {$ELSE}
+      GfxLog('Shader compilation failed on WebGL2.');
+      Result := False;
+      Exit;
+      {$ENDIF}
     end;
   end;
 
   if FixedPipeline then
   begin
+    {$IFDEF WEB}
+    RequiredFunctions := False; // No fixed pipeline on WebGL2
+    {$ELSE}
     RequiredFunctions :=
       Assigned(glEnableClientState) and
       Assigned(glVertexPointer)     and
       Assigned(glTexCoordPointer)   and
       Assigned(glColorPointer)      and
       Assigned(glLoadMatrixf);
+    {$ENDIF}
 
     if not RequiredFunctions then
     begin
@@ -822,7 +854,7 @@ end;
 
 procedure GfxTarget(RenderTarget: TGfxTexture);
 begin
-  if Assigned(glBindFramebuffer) then
+  if {$IFDEF WEB}True{$ELSE}Assigned(glBindFramebuffer){$ENDIF} then
   begin
     if (RenderTarget <> nil) and (RenderTarget.FFboHandle <> 0) then
       glBindFramebuffer(GL_FRAMEBUFFER, RenderTarget.FFboHandle)
@@ -945,8 +977,17 @@ begin
   if Finish then
     glFinish;
 
+  {$IFNDEF WEB}
   SDL_GL_SwapWindow(GameWindow);
+  {$ENDIF}
 end;
+
+{$IFDEF WEB}
+procedure GfxFlushErrors;
+begin
+  while glGetError() <> 0 do ;
+end;
+{$ENDIF}
 
 procedure GfxSetMipmapBias(Bias: Single);
 begin
@@ -1120,7 +1161,7 @@ begin
   glBindTexture(GL_TEXTURE_2D, Texture.FHandle);
   glEnable(GL_TEXTURE_2D);  // ati driver fuckery
 
-  if Assigned(glGenerateMipmap) then
+  if {$IFDEF WEB}True{$ELSE}Assigned(glGenerateMipmap){$ENDIF} then
   begin
     glGenerateMipmap(GL_TEXTURE_2D);
   end
@@ -1480,6 +1521,7 @@ procedure GfxDrawSprite(s: PGfxSprite; x, y, sx, sy, rx, ry, r: Single; Color: T
 var
   v: array[0..3] of TGfxVertex;
 begin
+  if (s = nil) or (s.Texture = nil) or (s.Texture.Width = 0) or (s.Texture.Height = 0) then Exit;
   GfxSpriteVertices(s, x, y, s.Width, s.Height, sx, sy, rx, ry, -r, Color, @v[0]);
   GfxDrawQuad(s.Texture, v);
 end;
@@ -1492,6 +1534,7 @@ var
   Rect: TGfxRect;
   tc: PGfxRect;
 begin
+  if (s = nil) or (s.Texture = nil) or (s.Texture.Width = 0) or (s.Texture.Height = 0) then Exit;
   w := Min(rc.Right - rc.Left, s.Width);
   h := Min(rc.Bottom - rc.Top, s.Height);
   tc := @s.TexCoords;
@@ -2942,6 +2985,7 @@ begin
 
   if ld.LoadingIndex = Length(ld.Images) then
   begin
+    {$IFDEF WEB}WriteLn('[LoadNextImage] DONE: loaded ', ld.LoadingIndex, ' images, stage 1->2');{$ENDIF}
     if ld.AdditionalFrames > 0 then
     begin
       k := 0;
@@ -3042,8 +3086,46 @@ var
   i, j, k, n: Integer;
   Textures: TTextureArray;
   ld: ^TSheetLoadData;
+  {$IFDEF WEB}
+  Tex: TGfxTexture;
+  Sprite: PGfxSprite;
+  {$ENDIF}
 begin
   ld := FLoadData;
+
+  {$IFDEF WEB}
+  // On web, skip atlas packing — create one texture per image.
+  // This avoids the OOB crash in BinPack/PackRectsRecursive.
+  SetLength(FTextures, Length(ld.Images));
+  for i := Low(ld.Images) to High(ld.Images) do
+  begin
+    if ld.Images[i] <> nil then
+    begin
+      Tex := GfxCreateTexture(ld.Images[i].Width, ld.Images[i].Height, 4,
+        ld.Images[i].GetImageData);
+      FTextures[i] := Tex;
+      Sprite := @FSprites[i];
+      Sprite.Texture := Tex;
+      Sprite.x := 0;
+      Sprite.y := 0;
+      Sprite.Width := ld.Images[i].Width;
+      Sprite.Height := ld.Images[i].Height;
+      Sprite.Scale := 1 / ld.ImagesTargetScale[i];
+      if Tex.Width > 0 then
+      begin
+        Sprite.TexCoords.Left := 0;
+        Sprite.TexCoords.Top := 0;
+        Sprite.TexCoords.Right := ld.Images[i].Width / Tex.Width;
+        Sprite.TexCoords.Bottom := ld.Images[i].Height / Tex.Height;
+      end;
+    end;
+  end;
+  // Skip stages 3 and 4 — go straight to done
+  ld.LoadingStage := 5;
+  Self.CleanUp;
+  Exit;
+  {$ENDIF}
+
   n := Length(FSprites) + Length(FAdditionalSprites);
   k := 0;
 

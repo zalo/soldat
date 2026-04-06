@@ -239,9 +239,11 @@ begin
       end
       else
       begin
+        {$IFNDEF WEB}
         DownloadThread := TDownloadThread.Create(DownloadURL + 'mods/' + ModName + '.smod',
           UserDirectory + 'mods/' + ModName + '.smod', TSHA1Digest(PlayersListMsg.ModChecksum));
         Exit;
+        {$ENDIF}
       end;
     end else
     begin
@@ -279,9 +281,11 @@ begin
     end else
     {$ENDIF}
     begin
+      {$IFNDEF WEB}
       DownloadThread := TDownloadThread.Create(DownloadURL + 'maps/' + MapName + '.smap',
         UserDirectory + 'maps/' + MapName + '.smap', PlayersListMsg.MapChecksum);
       Exit;
+      {$ENDIF}
     end;
   end;
 

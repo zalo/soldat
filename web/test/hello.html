@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<body>
+<pre id="out"></pre>
+<script>
+(async () => {
+  const out = document.getElementById('out');
+  const log = (msg) => { out.textContent += msg + '\n'; };
+
+  const resp = await fetch('hello.wasm');
+  const bytes = await resp.arrayBuffer();
+
+  // Minimal WASI stubs for FPC wasm32 output
+  const wasi = {
+    wasi_snapshot_preview1: {
+      args_get: () => 0,
+      args_sizes_get: (countPtr, sizePtr) => {
+        const dv = new DataView(instance.exports.memory.buffer);
+        dv.setUint32(countPtr, 0, true);
+        dv.setUint32(sizePtr, 0, true);
+        return 0;
+      },
+      environ_get: () => 0,
+      environ_sizes_get: (countPtr, sizePtr) => {
+        const dv = new DataView(instance.exports.memory.buffer);
+        dv.setUint32(countPtr, 0, true);
+        dv.setUint32(sizePtr, 0, true);
+        return 0;
+      },
+      fd_close: () => 0,
+      fd_fdstat_get: () => 0,
+      fd_filestat_get: () => 0,
+      fd_filestat_set_size: () => 0,
+      fd_prestat_get: () => 8, // EBADF - no preopened dirs
+      fd_prestat_dir_name: () => 8,
+      fd_read: () => 0,
+      fd_seek: () => 0,
+      fd_tell: () => 0,
+      fd_write: (fd, iovs, iovsLen, nwrittenPtr) => {
+        // Basic fd_write for stdout/stderr
+        const dv = new DataView(instance.exports.memory.buffer);
+        const mem = new Uint8Array(instance.exports.memory.buffer);
+        let written = 0;
+        for (let i = 0; i < iovsLen; i++) {
+          const ptr = dv.getUint32(iovs + i * 8, true);
+          const len = dv.getUint32(iovs + i * 8 + 4, true);
+          const chunk = new TextDecoder().decode(mem.subarray(ptr, ptr + len));
+          log('[stdout] ' + chunk);
+          written += len;
+        }
+        dv.setUint32(nwrittenPtr, written, true);
+        return 0;
+      },
+      path_create_directory: () => 0,
+      path_filestat_get: () => 0,
+      path_open: () => 0,
+      path_readlink: () => 0,
+      path_remove_directory: () => 0,
+      path_rename: () => 0,
+      path_unlink_file: () => 0,
+      proc_exit: (code) => { log('proc_exit(' + code + ')'); },
+      random_get: (bufPtr, bufLen) => {
+        const buf = new Uint8Array(instance.exports.memory.buffer, bufPtr, bufLen);
+        crypto.getRandomValues(buf);
+        return 0;
+      },
+    }
+  };
+
+  let instance;
+  const result = await WebAssembly.instantiate(bytes, wasi);
+  instance = result.instance;
+
+  log('WASM loaded, memory: ' + instance.exports.memory.buffer.byteLength + ' bytes');
+  log('Exports: ' + Object.keys(instance.exports).join(', '));
+
+  // Call _initialize if present (WASI convention for reactors)
+  if (instance.exports._initialize) {
+    instance.exports._initialize();
+    log('_initialize() called');
+  }
+
+  // Test the exported add function
+  if (instance.exports.add) {
+    const result = instance.exports.add(17, 25);
+    log('add(17, 25) = ' + result);
+    log(result === 42 ? 'PASS' : 'FAIL: expected 42');
+  } else {
+    log('FAIL: add function not found in exports');
+  }
+})();
+</script>
+</body>
+</html>

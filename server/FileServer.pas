@@ -3,8 +3,9 @@ unit FileServer;
 interface
 
 uses
-  sysutils, Classes, fphttpserver, strutils;
+  sysutils, Classes, {$IFNDEF WEB}fphttpserver,{$ENDIF} strutils;
 
+{$IFNDEF WEB}
 type
   THTTPServer = class(TFPHTTPServer)
   public
@@ -26,19 +27,24 @@ type
   public
     procedure DoHandleRequest(Sender: TObject; var ARequest: TFPHTTPConnectionRequest; var AResponse: TFPHTTPConnectionResponse);
   end;
+{$ENDIF}
 
 procedure StartFileServer;
 procedure StopFileServer;
 
 var
+  {$IFNDEF WEB}
   FServerThread: THTTPServerThread;
   FFileServer: TFileServer;
+  {$ENDIF}
+  FileServerDummy: Byte; // ensure var section is non-empty
 
 implementation
 
 uses
   Server{$IFDEF STEAM}, Steam{$ENDIF};
 
+{$IFNDEF WEB}
 constructor THTTPServerThread.Create(AAddress: AnsiString; APort: Word; const OnRequest: THTTPServerRequestHandler);
 begin
   inherited Create(False);
@@ -73,39 +79,6 @@ begin
   if Assigned(FServer) then
     FServer.Active := False;
   inherited DoTerminate;
-end;
-
-procedure StartFileServer;
-var
-  Port: Word;
-begin
-  if not Assigned(FServerThread) then
-  begin
-    if fileserver_port.Value = 0 then
-      Port := net_port.Value + 10
-    else
-      Port := fileserver_port.Value;
-
-    FServerThread := THTTPServerThread.Create(fileserver_ip.Value, Port, FFileServer.DoHandleRequest);
-    WriteLn('[FileServer] Starting fileserver on ' + fileserver_ip.Value + ':' + IntToStr(Port));
-  end;
-end;
-
-procedure StopFileServer;
-begin
-  if Assigned(FServerThread) then
-  begin
-    WriteLn('[FileServer] Stopping fileserver');
-    try
-      FServerThread.DoTerminate;
-      FreeAndNil(FServerThread);
-    except
-      on e: Exception do
-      begin
-        WriteLn('[FileServer] Error while stopping: ' + E.Message);
-      end;
-    end;
-  end;
 end;
 
 {$push}{$warn 5024 off}
@@ -189,5 +162,41 @@ begin
 
 end;
 {$pop}
+{$ENDIF} // not WEB
+
+procedure StartFileServer;
+begin
+  {$IFNDEF WEB}
+  if not Assigned(FServerThread) then
+  begin
+    if fileserver_port.Value = 0 then
+      FServerThread := THTTPServerThread.Create(fileserver_ip.Value, net_port.Value + 10, FFileServer.DoHandleRequest)
+    else
+      FServerThread := THTTPServerThread.Create(fileserver_ip.Value, fileserver_port.Value, FFileServer.DoHandleRequest);
+    WriteLn('[FileServer] Starting fileserver');
+  end;
+  {$ELSE}
+  WriteLn('[FileServer] File server not available on web target');
+  {$ENDIF}
+end;
+
+procedure StopFileServer;
+begin
+  {$IFNDEF WEB}
+  if Assigned(FServerThread) then
+  begin
+    WriteLn('[FileServer] Stopping fileserver');
+    try
+      FServerThread.DoTerminate;
+      FreeAndNil(FServerThread);
+    except
+      on e: Exception do
+      begin
+        WriteLn('[FileServer] Error while stopping: ' + E.Message);
+      end;
+    end;
+  end;
+  {$ENDIF}
+end;
 
 end.

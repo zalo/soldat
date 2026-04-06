@@ -3,12 +3,14 @@ unit FileClient;
 interface
 
 uses
-  SysUtils, Classes, sha1, strutils, fphttpclient,
+  SysUtils, Classes, sha1, strutils,
+  {$IFNDEF WEB}fphttpclient,{$ENDIF}
   GameRendering, Constants, Version;
 
 const
   MAX_DL_SIZE = 150000000;  // max download size in bytes
 
+{$IFNDEF WEB}
 type
   TDownloadThread = Class(TThread)
     private
@@ -34,6 +36,7 @@ type
       procedure CancelDownload;
       destructor Destroy; override;
   end;
+{$ENDIF}
 
 var
   DownloadRetry: Byte = 0;
@@ -43,6 +46,7 @@ implementation
 uses
   Client, Util;
 
+{$IFNDEF WEB}
 constructor TDownloadThread.Create(DownloadURL: String; Name: String; Checksum: TSHA1Digest);
 begin
   inherited Create(False);
@@ -149,5 +153,6 @@ end;
 procedure TDownloadThread.DummySync;
 begin
 end;
+{$ENDIF} // not WEB
 
 end.

@@ -872,6 +872,14 @@ uses
   {$ENDIF}
   ;
 
+{$IFDEF WEB}
+function ws_connect(hostPtr, roomPtr: PChar): LongBool; cdecl; external 'env';
+function ws_send(dataPtr: Pointer; size: LongInt; flags: LongInt): LongBool; cdecl; external 'env';
+function ws_recv(outPtr: Pointer; maxSize: LongInt): LongInt; cdecl; external 'env';
+function ws_get_state(): LongInt; cdecl; external 'env';
+procedure ws_disconnect(); cdecl; external 'env';
+{$ENDIF}
+
 procedure ProcessEventsCallback(pInfo: PSteamNetConnectionStatusChangedCallback_t); cdecl;
 begin
   UDP.ProcessEvents(pInfo);
@@ -887,12 +895,19 @@ end;
 
 constructor TNetwork.Create();
 {$IFNDEF STEAM}
+{$IFNDEF WEB}
 var
   ErrorMsg: SteamNetworkingErrMsg;
+{$ENDIF}
 {$ENDIF}
 begin
   FInit := True;
 
+  {$IFDEF WEB}
+  // On web, networking is handled by WebSocket bridge.
+  // GNS initialization is not needed.
+  WriteLn('[NET] Web networking initialized');
+  {$ELSE}
   {$IFNDEF STEAM}
   if not GameNetworkingSockets_Init(Nil, @ErrorMsg) then
     raise Exception.Create('GameNetworkingSockets_Init has failed: ' + PChar(ErrorMsg));
@@ -922,6 +937,7 @@ begin
 
   NetworkingUtils.SetDebugOutputFunction(k_ESteamNetworkingSocketsDebugOutputType_Msg, DebugNet);
   //NetworkingUtils.SetDebugOutputFunction(k_ESteamNetworkingSocketsDebugOutputType_Everything, DebugNet);
+  {$ENDIF}
 end;
 
 destructor TNetwork.Destroy();
@@ -933,11 +949,17 @@ end;
 
 function TNetwork.Disconnect(Now: Boolean): Boolean;
 {$IFDEF SERVER}
+{$IFNDEF WEB}
 var
   DstPlayer: TPlayer;
 {$ENDIF}
+{$ENDIF}
 begin
   Result := False;
+  {$IFDEF WEB}
+  ws_disconnect();
+  Result := True;
+  {$ELSE}
   {$IFDEF SERVER}
   if (FHost <> k_HSteamNetPollGroup_Invalid) then
   begin
@@ -951,12 +973,15 @@ begin
   {$ELSE}
   NetworkingSockets.CloseConnection(FPeer, 0, '', not Now)
   {$ENDIF}
+  {$ENDIF}
 end;
 
 procedure TNetwork.FlushMsg();
 begin
+  {$IFNDEF WEB}
   if FPeer <> k_HSteamNetConnection_Invalid then
     NetworkingSockets.FlushMessagesOnConnection(FPeer);
+  {$ENDIF}
 end;
 
 function TNetwork.GetDetailedConnectionStatus(hConn: HSteamNetConnection): String;
@@ -1036,6 +1061,20 @@ begin
 end;
 
 procedure TClientNetwork.ProcessLoop;
+{$IFDEF WEB}
+var
+  RecvBuf: array[0..8191] of Byte;
+  BytesRead: LongInt;
+begin
+  BytesRead := ws_recv(@RecvBuf[0], SizeOf(RecvBuf));
+  while BytesRead > 0 do
+  begin
+    // TODO: Wrap RecvBuf in a compatible message struct for HandleMessages
+    // For now, process raw bytes directly
+    BytesRead := ws_recv(@RecvBuf[0], SizeOf(RecvBuf));
+  end;
+end;
+{$ELSE}
 var
   NumMsgs: Integer;
   IncomingMsg: PSteamNetworkingMessage_t;
@@ -1057,6 +1096,7 @@ begin
   end else
     HandleMessages(IncomingMsg);
 end;
+{$ENDIF}
 
 
 procedure TClientNetwork.ProcessEvents(pInfo: PSteamNetConnectionStatusChangedCallback_t);
@@ -1108,6 +1148,12 @@ begin
 end;
 
 function TClientNetwork.Connect(Host: String; Port: Word): Boolean;
+{$IFDEF WEB}
+begin
+  Debug('Connecting to: ' + Host + ':' + IntToStr(Port));
+  Result := ws_connect(PChar(Host), PChar(IntToStr(Port)));
+end;
+{$ELSE}
 var
   ServerAddress: SteamNetworkingIPAddr;
   InitSettings: SteamNetworkingConfigValue_t;
@@ -1136,6 +1182,7 @@ begin
 
   FAddress := ServerAddress;
 end;
+{$ENDIF}
 
 procedure TClientNetwork.HandleMessages(IncomingMsg: PSteamNetworkingMessage_t);
 var
@@ -1288,11 +1335,15 @@ begin
   if Size < SizeOf(TMsgHeader) then
     Exit; // truncated packet
 
+  {$IFDEF WEB}
+  Result := ws_send(@Data, Size, Flags);
+  {$ELSE}
   if FPeer = k_HSteamNetConnection_Invalid then
     Exit; // not connected
 
   NetworkingSockets.SendMessageToConnection(FPeer, @Data, Size, Flags, nil);
   Result := True;
+  {$ENDIF}
 end;
 
 {$ELSE}

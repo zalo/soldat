@@ -45,3 +45,13 @@ Release
 *.swo
 *.swp
 *.swu
+
+# Playwright temp files
+.playwright-mcp/
+soldat-console*.log
+soldat-screenshot*.png
+web/soldat.smod
+web/soldat.wasm
+web/partykit/soldatserver.wasm
+web/test/*.wasm
+docs/superpowers/

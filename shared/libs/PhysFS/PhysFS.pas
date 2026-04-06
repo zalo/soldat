@@ -2,16 +2,31 @@ unit PhysFS;
 
 interface
   uses sysutils, Classes, TraceLog;
+type PHYSFS_File = pointer;
+type PHYSFS_Buffer = array of byte;
+
+{$IFDEF WEB}
+const PHYSFSLIB = 'env';
+function PHYSFS_init(argv0: Pchar): LongBool; cdecl; external PHYSFSLIB name 'physfs_init';
+function PHYSFS_deinit(): LongInt; cdecl; external PHYSFSLIB name 'physfs_deinit';
+function PHYSFS_mount(newDir, mountPoint: PChar; appendToPath: LongBool) : LongBool; cdecl; external PHYSFSLIB name 'physfs_mount';
+function PHYSFS_openRead(filename: PChar): PHYSFS_File; cdecl; external PHYSFSLIB name 'physfs_open_read';
+function PHYSFS_exists(filename: PChar): LongBool; cdecl; external PHYSFSLIB name 'physfs_exists';
+function PHYSFS_eof(pfile: PHYSFS_File): LongBool; cdecl; external PHYSFSLIB name 'physfs_eof';
+function PHYSFS_read(pfile: PHYSFS_File; buffer: pointer; obj_size: Longword; obj_count: Longword): Int64; cdecl; external PHYSFSLIB name 'physfs_read';
+function PHYSFS_close(pfile: PHYSFS_File): Int64; cdecl; external PHYSFSLIB name 'physfs_close';
+function PHYSFS_getLastError(): PChar; cdecl; external PHYSFSLIB name 'physfs_get_last_error';
+function PHYSFS_fileLength(pfile: PHYSFS_File): Int64; cdecl; external PHYSFSLIB name 'physfs_file_length';
+function PHYSFS_removeFromSearchPath(oldDir: PChar): LongBool; cdecl; external PHYSFSLIB name 'physfs_remove_from_search_path';
+procedure PHYSFS_freeList(listVar: Pointer); cdecl; external PHYSFSLIB name 'physfs_free_list';
+function PHYSFS_enumerateFiles(const dir: PChar): PPChar; cdecl; external PHYSFSLIB name 'physfs_enumerate_files';
+{$ELSE}
 const
 {$IFDEF MSWINDOWS}
  PHYSFSLIB = 'physfs.dll';
 {$ELSE}
  PHYSFSLIB = 'physfs.so';
 {$ENDIF}
-
-type PHYSFS_File = pointer;
-type PHYSFS_Buffer = array of byte;
-
 function PHYSFS_init(argv0: Pchar): LongBool; cdecl; external PHYSFSLIB;
 function PHYSFS_deinit(): LongInt; cdecl; external PHYSFSLIB;
 function PHYSFS_mount(newDir, mountPoint: PChar; appendToPath: LongBool) : LongBool; cdecl; external PHYSFSLIB;
@@ -25,6 +40,7 @@ function PHYSFS_fileLength(pfile: PHYSFS_File): Int64; cdecl; external PHYSFSLIB
 function PHYSFS_removeFromSearchPath(oldDir: PChar): LongBool; cdecl; external PHYSFSLIB;
 procedure PHYSFS_freeList(listVar: Pointer); cdecl; external PHYSFSLIB;
 function PHYSFS_enumerateFiles(const dir: PChar): PPChar; cdecl; external PHYSFSLIB;
+{$ENDIF}
 
 function PHYSFS_readBuffer(Name: PChar): PHYSFS_Buffer;
 function PHYSFS_readAsStream(Name: PChar): TStream;

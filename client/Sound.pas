@@ -72,12 +72,27 @@ uses
   Client, SysUtils,
   LogFile, Math, Constants, Game;
 
+{$IFDEF WEB}
+function al_init(): LongBool; cdecl; external 'env';
+procedure al_resume(); cdecl; external 'env';
+function al_load_sample(dataPtr: Pointer; dataSize: LongInt; channels, bitsPerSample, freq: LongInt): LongInt; cdecl; external 'env';
+function al_play_sound(sampleId: LongInt; emitterX, emitterY, volume: Single; channel: LongInt): LongInt; cdecl; external 'env';
+procedure al_stop_sound(channel: LongInt); cdecl; external 'env';
+procedure al_set_volume(channel: LongInt; volume: Single); cdecl; external 'env';
+procedure al_set_listener(x, y: Single); cdecl; external 'env';
+{$ENDIF}
+
 function InitSound(): Boolean;
 var
   I: Integer;
 begin
   Result := False;
 
+  {$IFDEF WEB}
+  Result := al_init();
+  for I := 1 to MAX_SAMPLES do
+    Samp[I].Loaded := False;
+  {$ELSE}
   ALDevice := alcOpenDevice(nil);
   if ALDevice = nil then
     Exit;
@@ -103,6 +118,7 @@ begin
   VoiceBufferQueue := TFPGLIST<LongWord>.Create;
   for i := 0 to High(VoiceChatBuffer) do
     VoiceBufferQueue.Add(VoiceChatBuffer[i]);
+  {$ENDIF}
   {$ENDIF}
 end;
 

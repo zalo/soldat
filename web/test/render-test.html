@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0;background:#000">
+<canvas id="c" width="800" height="600" style="display:block;margin:auto"></canvas>
+<pre id="log" style="color:#0f0;font-size:12px;padding:10px"></pre>
+<script type="module">
+import { createGLBridge } from '../bridge.js';
+
+const log = (m) => {
+  document.getElementById('log').textContent += m + '\n';
+  console.log(m);
+};
+
+const canvas = document.getElementById('c');
+let memory;
+const memProxy = new Proxy({}, {
+  get(_, prop) { return prop === 'buffer' ? memory.buffer : undefined; }
+});
+const glBridge = createGLBridge(memProxy, canvas);
+
+const resp = await fetch('render-test.wasm');
+const bytes = await resp.arrayBuffer();
+
+const wasi = {
+  wasi_snapshot_preview1: {
+    args_get: () => 0,
+    args_sizes_get: (a, b) => {
+      const d = new DataView(memory.buffer);
+      d.setUint32(a, 0, true); d.setUint32(b, 0, true); return 0;
+    },
+    environ_get: () => 0,
+    environ_sizes_get: (a, b) => {
+      const d = new DataView(memory.buffer);
+      d.setUint32(a, 0, true); d.setUint32(b, 0, true); return 0;
+    },
+    fd_close: () => 0,
+    fd_fdstat_get: () => 0,
+    fd_filestat_get: () => 0,
+    fd_filestat_set_size: () => 0,
+    fd_prestat_get: () => 8,
+    fd_prestat_dir_name: () => 8,
+    fd_read: () => 0,
+    fd_seek: () => 0,
+    fd_tell: () => 0,
+    fd_write: (fd, iovs, iovsLen, nwrittenPtr) => {
+      const dv = new DataView(memory.buffer);
+      const mem = new Uint8Array(memory.buffer);
+      let written = 0;
+      for (let i = 0; i < iovsLen; i++) {
+        const ptr = dv.getUint32(iovs + i * 8, true);
+        const len = dv.getUint32(iovs + i * 8 + 4, true);
+        log('[wasm] ' + new TextDecoder().decode(mem.subarray(ptr, ptr + len)).trim());
+        written += len;
+      }
+      dv.setUint32(nwrittenPtr, written, true);
+      return 0;
+    },
+    path_create_directory: () => 0,
+    path_filestat_get: () => 0,
+    path_open: () => 0,
+    path_readlink: () => 0,
+    path_remove_directory: () => 0,
+    path_rename: () => 0,
+    path_unlink_file: () => 0,
+    proc_exit: (code) => log('proc_exit(' + code + ')'),
+    random_get: (bufPtr, bufLen) => {
+      crypto.getRandomValues(new Uint8Array(memory.buffer, bufPtr, bufLen));
+      return 0;
+    },
+  }
+};
+
+const { instance } = await WebAssembly.instantiate(bytes, { ...wasi, env: glBridge });
+memory = instance.exports.memory;
+
+log('WASM loaded (' + (bytes.byteLength / 1024).toFixed(0) + 'KB)');
+log('Exports: ' + Object.keys(instance.exports).filter(k => k !== 'memory').join(', '));
+
+if (instance.exports._initialize) instance.exports._initialize();
+instance.exports.init();
+log('init() done, starting render loop...');
+
+let frames = 0;
+function frame() {
+  instance.exports.frame();
+  frames++;
+  if (frames % 60 === 0) log('Frame ' + frames);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+log('Canvas should show slowly cycling dark colors');
+</script>
+</body>
+</html>

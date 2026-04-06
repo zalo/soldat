@@ -64,6 +64,11 @@ begin
   GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0);
 end;
 {$ELSE}
+{$IFDEF WEB}
+// Web target: no signal handling needed
+procedure SetSigHooks; begin end;
+procedure ClearSigHooks; begin end;
+{$ELSE}
 // The linux server can be killed with
 // 'kill -TERM(15) <pid>' or 'kill -QUIT(3) <pid>' and
 // it will clean itself up, instead of forcing you to use 'KILL -KILL(9) <pid>'
@@ -187,14 +192,19 @@ begin
   if fpSigAction(SIGPIPE,  FSIGPIPEOLD, nil) <> 0 then
     raise Exception.Create('SIGAction failed');
 end;
-{$ENDIF}
+{$ENDIF} // not WEB
+{$ENDIF} // not MSWINDOWS
 
 function IsRoot: Boolean;
 begin
   {$IFDEF MSWINDOWS}
   Result := False;  // Ignore for Windows users
   {$ELSE}
+  {$IFDEF WEB}
+  Result := False;
+  {$ELSE}
   Result := (FpGeteuid() = 0);
+  {$ENDIF}
   {$ENDIF}
 end;
 

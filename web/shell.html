@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>OpenSoldat</title>
+<script type="importmap">
+{
+  "imports": {
+    "fflate": "./node_modules/fflate/esm/browser.js",
+    "idb-keyval": "./node_modules/idb-keyval/dist/index.js",
+    "partysocket": "./node_modules/partysocket/dist/index.js"
+  }
+}
+</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
+
+  #loading {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: #e0e0e0; font-family: sans-serif;
+  }
+  #loading h1 { font-size: 2rem; margin-bottom: 1.5rem; color: #c8a850; letter-spacing: 2px; }
+  #progress-bar-bg {
+    width: 320px; height: 20px;
+    background: #2a2a4a; border-radius: 10px;
+    overflow: hidden; margin-bottom: 0.5rem;
+  }
+  #progress-bar-fill {
+    width: 0%; height: 100%;
+    background: linear-gradient(90deg, #c8a850, #e8d070);
+    border-radius: 10px;
+    transition: width 0.2s;
+  }
+  #progress-text { font-size: 0.85rem; color: #888; }
+
+  #game-canvas {
+    display: none;
+    width: 100%; height: 100%;
+  }
+
+  /* Touch controls overlay */
+  #touch-controls {
+    display: none; position: absolute; inset: 0;
+    pointer-events: none; z-index: 10;
+  }
+  #touch-controls.visible { display: block; }
+
+  #stick-left-zone, #stick-right-zone {
+    position: absolute; bottom: 20px;
+    width: 160px; height: 160px;
+    pointer-events: auto; touch-action: none;
+  }
+  #stick-left-zone { left: 20px; }
+  #stick-right-zone { right: 20px; }
+
+  .stick-base {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 120px; height: 120px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 50%; background: rgba(255,255,255,0.05);
+  }
+  .stick-knob {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 50px; height: 50px;
+    border-radius: 50%; background: rgba(255,255,255,0.25);
+  }
+
+  .touch-btn {
+    position: absolute; pointer-events: auto; touch-action: none;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-family: sans-serif; user-select: none;
+  }
+  .touch-btn.pressed { background: rgba(255,255,255,0.3); }
+
+  #btn-fire    { right: 200px; bottom: 90px; width: 64px; height: 64px; }
+  #btn-jump    { right: 200px; bottom: 170px; width: 56px; height: 56px; }
+  #btn-reload  { right: 280px; bottom: 120px; font-size: 0.65rem; width: 48px; height: 48px; }
+  #btn-throw   { right: 280px; bottom: 50px; font-size: 0.65rem; width: 48px; height: 48px; }
+  #btn-wpn-next { right: 130px; bottom: 180px; font-size: 0.6rem; width: 44px; height: 44px; }
+</style>
+</head>
+<body>
+  <div id="loading">
+    <h1>OPENSOLDAT</h1>
+    <div id="progress-bar-bg">
+      <div id="progress-bar-fill"></div>
+    </div>
+    <div id="progress-text">Initializing...</div>
+    <div id="progress-detail" style="font-size:0.75rem;color:#666;margin-top:0.3rem"></div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+
+  <div id="touch-controls">
+    <div id="stick-left-zone">
+      <div class="stick-base"><div class="stick-knob" id="stick-left-knob"></div></div>
+    </div>
+    <div id="stick-right-zone">
+      <div class="stick-base"><div class="stick-knob" id="stick-right-knob"></div></div>
+    </div>
+    <div id="btn-fire" class="touch-btn">FIRE</div>
+    <div id="btn-jump" class="touch-btn">JMP</div>
+    <div id="btn-reload" class="touch-btn">RLD</div>
+    <div id="btn-throw" class="touch-btn">GRN</div>
+    <div id="btn-wpn-next" class="touch-btn">WPN</div>
+  </div>
+
+  <script type="module" src="main.js?v=4"></script>
+</body>
+</html>

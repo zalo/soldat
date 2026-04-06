@@ -1,0 +1,19 @@
+{
+  "name": "opensoldat-web",
+  "private": true,
+  "scripts": {
+    "build:client": "./build.sh client",
+    "build:server": "./build.sh server",
+    "build": "./build.sh all",
+    "dev": "npx partykit dev --live",
+    "deploy": "npx partykit deploy"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "idb-keyval": "^6.2.1",
+    "partysocket": "^1.0.2"
+  },
+  "devDependencies": {
+    "partykit": "^0.0.115"
+  }
+}

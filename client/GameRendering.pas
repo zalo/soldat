@@ -93,6 +93,7 @@ var
   RenderTargetAA: TGfxTexture;
   ScreenshotPath: string;
   ScreenshotAsync: Boolean;
+
   ImageScale: array[1..GFXID_END] of Single;
   GostekData: TStringList;
   ScaleData: record
@@ -287,6 +288,19 @@ var
   Orig, Png: String;
 begin
   Result := Filename;
+
+  {$IFDEF WEB}
+  // On web, PhysFS bridge handles .bmp→.png fallback in lookupFile.
+  // Just normalize the path and try .png if .bmp doesn't exist.
+  Orig := StringReplace(LowerCase(Filename), '\', '/', [rfReplaceAll]);
+  Png := ChangeFileExt(Orig, '.png');
+  if PHYSFS_exists(PChar(Png)) then
+    Result := Png
+  else if PHYSFS_exists(PChar(Orig)) then
+    Result := Orig;
+  Exit;
+  {$ENDIF}
+
   if CaseInsensitiveImageMap = Nil then
     Exit;
 
@@ -314,6 +328,7 @@ begin
       Inc(Count);
   end;
 
+  {$IFDEF WEB}WriteLn('[LoadMainTextures] Count=', Count, ' GFXID_END=', GFXID_END);{$ENDIF}
   MainSpritesheet := TGfxSpritesheet.Create(Count);
   Scale := 1.5 * RenderHeight / GameHeight;
 
@@ -434,8 +449,15 @@ end;
 function GetFontPath(FontFile: string): string; overload;
 begin
   Result := '';
+  {$IFDEF WEB}
+  // On web, fonts aren't in the smod but the JS bridge provides them.
+  // Return the filename directly — the JS FreeType bridge handles loading.
+  if FontFile <> '' then
+    Result := FontFile;
+  {$ELSE}
   if FileExists(BaseDirectory + FontFile) then
     Result := BaseDirectory + FontFile;
+  {$ENDIF}
 end;
 
 function GetFontPath(Fallback: String; var FontFile: String): String; overload;
@@ -869,7 +891,24 @@ begin
 
   // graphics might be destroyed before end of game loop
   if mg.VertexBuffer = nil then
+  begin
+    {$IFDEF WEB}
+    GfxTarget(nil);
+    GfxViewport(0, 0, RenderWidth, RenderHeight);
+    GfxClear(25, 30, 45, 255);
+    // Only try to render interface after textures are done loading
+    if (MainSpritesheet <> nil) and (not MainSpritesheet.Loading) and
+       (InterfaceSpritesheet <> nil) and (not InterfaceSpritesheet.Loading) then
+    begin
+      GfxBegin();
+      GfxTransform(GfxMat3Ortho(0, RenderWidth, 0, RenderHeight));
+      RenderInterface(TimeElapsed, RenderWidth, RenderHeight);
+      GfxEnd();
+    end;
+    GfxPresent(False);
+    {$ENDIF}
     Exit;
+  end;
 
   if RenderTarget <> nil then
   begin
@@ -934,6 +973,13 @@ begin
     else
       GfxClear(MapGfx.BgColorTop);
 
+    {$IFDEF WEB}
+    // Flush accumulated GL errors that poison subsequent draw calls.
+    // Some GL calls generate INVALID_ENUM/INVALID_OPERATION on WebGL2
+    // (e.g., glEnable(GL_TEXTURE_2D), glTexEnvf, glHint).
+    GfxFlushErrors();
+    {$ENDIF}
+
     if r_animations.Value then
       UpdateProps(TimeElapsed);
 
@@ -943,6 +989,7 @@ begin
 
     GfxTransform(GfxMat3Ortho(dx, w + dx, dy, h + dy));
 
+    {$IFDEF WEB}GfxFlushErrors();{$ENDIF}
     if r_smoothedges.Value and (Length(mg.Edges[0]) > 0) then
       GfxDraw(mg.VertexBuffer, mg.IndexBuffer, @mg.Edges[0][0], Length(mg.Edges[0]));
 
@@ -983,11 +1030,20 @@ begin
     GfxEnd();
     GfxSetMipmapBias(0);
 
+    {$IFDEF WEB}
+    // Re-set world transform — GfxEnd overwrites the uniform on web
+    GfxTransform(GfxMat3Ortho(dx, w + dx, dy, h + dy));
+    {$ENDIF}
     if r_smoothedges.Value and (Length(mg.Edges[1]) > 0) then
       GfxDraw(mg.VertexBuffer, mg.IndexBuffer, @mg.Edges[1][0], Length(mg.Edges[1]));
 
     if Length(mg.Polys[1]) > 0 then
+    begin
+      {$IFDEF WEB}
+      GfxTransform(GfxMat3Ortho(dx, w + dx, dy, h + dy));
+      {$ENDIF}
       GfxDraw(mg.VertexBuffer, @mg.Polys[1][0], Length(mg.Polys[1]));
+    end;
 
     GfxSetMipmapBias(r_mipmapbias.Value);
     RenderProps(2);
