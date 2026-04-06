@@ -41,8 +41,13 @@ export function createInputBridge(memory, canvas) {
   const isTouchDevice = ('ontouchstart' in window) && navigator.maxTouchPoints > 0;
 
   // --- Keyboard ---
+  function isInputFocused() {
+    const el = document.activeElement;
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  }
+
   document.addEventListener('keydown', (e) => {
-    if (!keyStatePtr) return;
+    if (!keyStatePtr || isInputFocused()) return;
     const sc = SDL_SCANCODES[e.code];
     if (sc !== undefined) {
       new Uint8Array(memory.buffer)[keyStatePtr + sc] = 1;
@@ -51,7 +56,7 @@ export function createInputBridge(memory, canvas) {
   });
 
   document.addEventListener('keyup', (e) => {
-    if (!keyStatePtr) return;
+    if (!keyStatePtr || isInputFocused()) return;
     const sc = SDL_SCANCODES[e.code];
     if (sc !== undefined) {
       new Uint8Array(memory.buffer)[keyStatePtr + sc] = 0;
@@ -62,6 +67,9 @@ export function createInputBridge(memory, canvas) {
   // --- Mouse (PointerLock) ---
   if (!isTouchDevice) {
     canvas.addEventListener('click', () => {
+      // Don't capture mouse if lobby overlay is visible
+      const lobby = document.getElementById('lobby');
+      if (lobby && lobby.style.display !== 'none') return;
       if (!document.pointerLockElement) canvas.requestPointerLock();
     });
 

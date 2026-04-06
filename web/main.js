@@ -663,12 +663,16 @@ async function main() {
       joinRoom(roomName);
     });
 
-    document.getElementById('btn-join').addEventListener('click', () => {
+    const joinFromInput = () => {
       const roomName = document.getElementById('input-room').value.trim();
       if (roomName) {
         window.location.hash = '#room=' + roomName;
         joinRoom(roomName);
       }
+    };
+    document.getElementById('btn-join').addEventListener('click', joinFromInput);
+    document.getElementById('input-room').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinFromInput();
     });
 
     document.getElementById('btn-offline').addEventListener('click', () => {

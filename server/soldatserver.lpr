@@ -22,7 +22,7 @@ uses
   {$IFDEF AUTOUPDATER}
   AutoUpdater,
   {$ENDIF}
-  {$IFDEF WEB}SysUtils, Server, ServerLoop, Net, Game, Sprites, Constants, Weapons,{$ENDIF}
+  {$IFDEF WEB}SysUtils, Server, ServerLoop, Net, Game, Sprites, Constants, Weapons, Cvar,{$ENDIF}
   Main in 'Main.pas';
 
 {$IFDEF MSWINDOWS}
@@ -51,6 +51,8 @@ procedure server_init(); cdecl; export;
 begin
   DefaultSystemCodePage := CP_UTF8;
   ActivateServer;
+  // Set Deathmatch mode for web (no team selection needed)
+  sv_gamemode.ParseAndSetValue('0');
   if ProgReady then
     StartServer;
 end;
