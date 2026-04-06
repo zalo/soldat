@@ -12,8 +12,22 @@ export default class SoldatServer implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
   async onStart() {
-    // Load bundled map/config assets (to be populated with actual game data)
+    // Load server-only asset bundle (maps, configs, anims — 3.2MB)
     const bundledAssets = new Map<string, Uint8Array>();
+    try {
+      const smodResp = await fetch(new URL('./soldat-server.smod', import.meta.url));
+      if (smodResp.ok) {
+        const { unzipSync } = await import('fflate');
+        const smodBytes = new Uint8Array(await smodResp.arrayBuffer());
+        const files = unzipSync(smodBytes);
+        for (const [path, data] of Object.entries(files)) {
+          if (data.length > 0) bundledAssets.set(path, data);
+        }
+        console.log(`[soldat-server] Loaded ${bundledAssets.size} assets from server smod`);
+      }
+    } catch (e) {
+      console.warn('[soldat-server] Failed to load server smod:', e);
+    }
 
     // Memory proxy — updated after instantiation
     let memoryRef: WebAssembly.Memory | null = null;

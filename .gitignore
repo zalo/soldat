@@ -55,3 +55,4 @@ web/soldat.wasm
 web/partykit/soldatserver.wasm
 web/test/*.wasm
 docs/superpowers/
+web/partykit/soldat-server.smod
