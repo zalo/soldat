@@ -140,15 +140,19 @@ end;
 
 procedure join_room(roomPtr: PChar); cdecl; export;
 begin
-  // Called from JS when user clicks Join or URL has #room=name
-  // Set JoinIP to the room name — on web, Connect passes this to ws_connect
   JoinIP := String(roomPtr);
-  JoinPort := '0'; // Numeric port required by JoinServer parser
+  JoinPort := '0';
   WriteLn('[web] Joining room: ', JoinIP);
   JoinServer();
 end;
 
-exports web_init, web_tick, web_alloc, web_free, web_resize, join_room;
+procedure web_spawn_offline(); cdecl; export;
+begin
+  WebSpawnOfflinePlayer();
+  WriteLn('[web] Offline player spawned');
+end;
+
+exports web_init, web_tick, web_alloc, web_free, web_resize, join_room, web_spawn_offline;
 {$ENDIF}
 
 begin

@@ -51,6 +51,9 @@ procedure StartGame;
 procedure ShutDown;
 procedure ExitToMenu;
 procedure RestartGraph;
+{$IFDEF WEB}
+procedure WebSpawnOfflinePlayer;
+{$ENDIF}
 procedure ShowMessage(MessageText: AnsiString); overload;
 procedure ShowMessage(MessageText: WideString); overload;
 
@@ -588,7 +591,6 @@ end;
 procedure WebLoadDefaultMap();
 var
   WebMapInfo: TMapInfo;
-  SpawnPos: TVector2;
 begin
   WebMapInfo := Default(TMapInfo);
   if not GetMapInfo('Arena', '', WebMapInfo) then
@@ -603,17 +605,19 @@ begin
     Exit;
   end;
 
-  // Set default key bindings
+  // Set default key bindings and weapons
   WebSetDefaultBindings();
-
-  // Create default weapons (ensure weapon data is available)
   CreateDefaultWeapons(False);
+  MapChangeCounter := -60;
+end;
 
-  // Spawn a local player
+procedure WebSpawnOfflinePlayer();
+var
+  SpawnPos: TVector2;
+begin
   SpawnPos := Default(TVector2);
   SpawnPos.x := 400;
   SpawnPos.y := 200;
-  // Try to get a real spawn point
   RandomizeStart(SpawnPos, 0);
 
   Sprite[1].Player.Name := 'Player';
@@ -621,18 +625,10 @@ begin
   Sprite[1].Player.ControlMethod := HUMAN;
   CreateSprite(SpawnPos, Default(TVector2), 1, 1, Sprite[1].Player, False);
 
-  // Assign as our sprite
   MySprite := 1;
   CameraFollowSprite := 1;
-
-  // Give weapons - Desert Eagles primary, Colt secondary
   Sprite[1].ApplyWeaponByNum(Guns[EAGLE].Num, 1);
   Sprite[1].ApplyWeaponByNum(Guns[COLT].Num, 2);
-
-  // Set game state to playing
-  MapChangeCounter := -60;
-
-  WriteLn('[web] Player spawned at (', Round(SpawnPos.x), ',', Round(SpawnPos.y), ')');
 end;
 {$ENDIF}
 

@@ -5,6 +5,7 @@ export function createNetworkBridge(memory) {
   let socket = null;
   const incomingQueue = []; // ArrayBuffer[]
   let connectionState = 0; // 0=none, 1=connecting, 2=connected, 3=closed
+  const pendingSends = []; // Messages queued while connecting
 
   function readString(ptr) {
     const view = new Uint8Array(memory.buffer);
@@ -27,7 +28,12 @@ export function createNetworkBridge(memory) {
 
       socket.addEventListener('open', () => {
         connectionState = 2;
+        console.log(`[ws] Connected to room "${room}"`);
         history.replaceState(null, '', '#room=' + encodeURIComponent(room));
+        // Flush any messages queued while connecting
+        while (pendingSends.length > 0) {
+          socket.send(pendingSends.shift());
+        }
       });
 
       socket.addEventListener('message', (e) => {
@@ -45,8 +51,16 @@ export function createNetworkBridge(memory) {
     },
 
     ws_send: (dataPtr, size, flags) => {
-      if (!socket || connectionState !== 2) return 0;
-      socket.send(new Uint8Array(memory.buffer, dataPtr, size).slice());
+      if (!socket) return 0;
+      const data = new Uint8Array(memory.buffer, dataPtr, size).slice();
+      if (connectionState === 2) {
+        socket.send(data);
+      } else if (connectionState === 1) {
+        // Queue until connected
+        pendingSends.push(data);
+      } else {
+        return 0;
+      }
       return 1;
     },
 

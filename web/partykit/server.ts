@@ -224,13 +224,13 @@ export default class SoldatServer implements Party.Server {
     // Format: [targetConnId: i32][payloadLen: i32][payload bytes]...
     let offset = 0;
     while (offset + 8 <= bytesWritten) {
-      const dv = new DataView(memoryProxy.buffer, outPtr + offset);
+      const dv = new DataView(this.memory.buffer, outPtr + offset);
       const targetConnId = dv.getInt32(0, true);
       const payloadLen = dv.getInt32(4, true);
       offset += 8;
 
       if (offset + payloadLen > bytesWritten) break;
-      const payload = new Uint8Array(memoryProxy.buffer, outPtr + offset, payloadLen).slice();
+      const payload = new Uint8Array(this.memory.buffer, outPtr + offset, payloadLen).slice();
       offset += payloadLen;
 
       if (targetConnId === 0) {

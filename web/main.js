@@ -673,7 +673,10 @@ async function main() {
 
     document.getElementById('btn-offline').addEventListener('click', () => {
       lobbyEl.style.display = 'none';
-      // Offline mode — player is already spawned by WebLoadDefaultMap
+      // Spawn local player for offline mode
+      if (instance.exports.web_spawn_offline) {
+        instance.exports.web_spawn_offline();
+      }
     });
   }
 
