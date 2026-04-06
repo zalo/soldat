@@ -1,4 +1,4 @@
-// ../node_modules/fflate/esm/browser.js
+// ../lib/fflate.js
 var u8 = Uint8Array;
 var u16 = Uint16Array;
 var i32 = Int32Array;
@@ -457,7 +457,7 @@ function unzipSync(data, opts) {
   return files;
 }
 
-// ../node_modules/idb-keyval/dist/index.js
+// ../lib/idb-keyval.js
 function promisifyRequest(request) {
   return new Promise((resolve, reject) => {
     request.oncomplete = request.onsuccess = () => resolve(request.result);
@@ -1420,7 +1420,7 @@ function createInputBridge(memory, canvas) {
   };
 }
 
-// ../node_modules/partysocket/dist/ws.js
+// ../lib/ws.js
 if (!globalThis.EventTarget || !globalThis.Event)
   console.error(`
   PartySocket requires a global 'EventTarget' class to be available!
@@ -1835,7 +1835,7 @@ const partysocket = new PartySocket({
   }
 };
 
-// ../node_modules/partysocket/dist/index.js
+// ../lib/partysocket.js
 var valueIsNotNil = (keyValuePair) => keyValuePair[1] !== null && keyValuePair[1] !== void 0;
 function generateUUID() {
   if (crypto?.randomUUID) return crypto.randomUUID();
@@ -2009,7 +2009,9 @@ function createNetworkBridge(memory) {
       const host = readString(hostPtr);
       const room = readString(roomPtr);
       connectionState = 1;
-      socket = new PartySocket({ host, room });
+      const effectiveHost = host || window.location.host;
+      console.log(`[ws] Connecting to PartyKit room "${room}" at host "${effectiveHost}"`);
+      socket = new PartySocket({ host: effectiveHost, room });
       socket.binaryType = "arraybuffer";
       socket.addEventListener("open", () => {
         connectionState = 2;

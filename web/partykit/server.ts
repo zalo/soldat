@@ -128,34 +128,43 @@ export default class SoldatServer implements Party.Server {
   private initServer() {
     if (this.initialized) return;
     this.initialized = true;
-    // Skip _start — it exceeds the CPU time limit in Workers runtime.
-    // Server runs without full initialization (no map loaded, etc.)
-    // TODO: Find a way to initialize the server within CPU limits
-    // (e.g., compile as reactor, or split init into smaller steps)
-    console.log('[soldat-server] Server stub ready (no _start — CPU limit)');
+    console.log('[soldat-server] Calling _start...');
+    try {
+      (this.wasm.exports as any)._start();
+    } catch {
+      // Expected: _start ends with proc_exit → unreachable trap
+    }
+    console.log('[soldat-server] Server initialized');
   }
 
   async onConnect(conn: Party.Connection) {
-    // Minimal handler — just track connection
+    this.initServer();
+
     const connId = this.nextConnId++;
     this.connIdMap.set(conn.id, connId);
-    conn.send('connected:' + connId);
+    console.log(`[soldat-server] Player connected: ${connId}`);
 
-    // Skip WASM call for now — RTL not initialized
-    // if ((this.wasm.exports as any).server_on_connect) {
-    //   (this.wasm.exports as any).server_on_connect(connId);
-    // }
+    if ((this.wasm.exports as any).server_on_connect) {
+      try {
+        (this.wasm.exports as any).server_on_connect(connId);
+      } catch (e: any) {
+        console.error('[soldat-server] server_on_connect error:', e?.message?.substring(0, 80));
+      }
+    }
 
     // Start game loop when first player connects
-    // Disabled: WASM not initialized
-    // if (!this.interval) {
-    //   this.interval = setInterval(() => {
-    //     if ((this.wasm.exports as any).server_tick) {
-    //       (this.wasm.exports as any).server_tick();
-    //     }
-    //     this.flushOutboundMessages();
-    //   }, 1000 / 60);
-    // }
+    if (!this.interval) {
+      this.interval = setInterval(() => {
+        try {
+          if ((this.wasm.exports as any).server_tick) {
+            (this.wasm.exports as any).server_tick();
+          }
+          this.flushOutboundMessages();
+        } catch (e: any) {
+          console.error('[soldat-server] tick error:', e?.message?.substring(0, 60));
+        }
+      }, 1000 / 60);
+    }
   }
 
   async onMessage(message: string | ArrayBuffer, sender: Party.Connection) {
@@ -169,18 +178,17 @@ export default class SoldatServer implements Party.Server {
       bytes = new TextEncoder().encode(message);
     }
 
-    console.log(`[soldat-server] onMessage: connId=${connId}, ${bytes.length} bytes, MsgID=${bytes[0]}`);
-    if ((this.wasm.exports as any).server_on_message) {
-      const alloc = (this.wasm.exports as any).alloc_buffer;
-      if (alloc) {
-        const ptr = alloc(bytes.length);
-        new Uint8Array(this.memory.buffer).set(bytes, ptr);
-        (this.wasm.exports as any).server_on_message(connId, ptr, bytes.length);
-      } else {
-        console.warn('[soldat-server] alloc_buffer export not found!');
+    try {
+      if ((this.wasm?.exports as any)?.server_on_message) {
+        const alloc = (this.wasm.exports as any).alloc_buffer;
+        if (alloc) {
+          const ptr = alloc(bytes.length);
+          new Uint8Array(this.memory.buffer).set(bytes, ptr);
+          (this.wasm.exports as any).server_on_message(connId, ptr, bytes.length);
+        }
       }
-    } else {
-      console.warn('[soldat-server] server_on_message export not found!');
+    } catch (e: any) {
+      console.error('[soldat-server] onMessage error:', e?.message?.substring(0, 80));
     }
   }
 

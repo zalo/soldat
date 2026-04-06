@@ -1,0 +1,7 @@
+soldat.smod
+soldat.wasm
+soldat2.wasm
+node_modules
+build
+test
+*.wasm
