@@ -582,7 +582,9 @@ begin
   Debug('[FS] UserDirectory: ' + UserDirectory);
   Debug('[FS] BaseDirectory: ' + BaseDirectory);
 
+  {$IFNDEF WEB}
   SetCurrentDir(UserDirectory);
+  {$ENDIF}
 
   if not PhysFS_Init(PChar(ParamStr(0))) then
   begin
@@ -599,10 +601,13 @@ begin
     Exit;
   end;
 
+  {$IFNDEF WEB}
   GameModChecksum := Sha1File(BaseDirectory + '/soldat.smod', 4096);
+  {$ENDIF}
 
   ModDir := '';
 
+  {$IFNDEF WEB}
   if fs_mod.Value <> '' then
   begin
     if not PhysFS_mount(PChar(UserDirectory + 'mods/' + LowerCase(fs_mod.Value) + '.smod'),
@@ -616,7 +621,9 @@ begin
     ModDir := 'mods/' + LowerCase(fs_mod.Value) + '/';
     CustomModChecksum := Sha1File(UserDirectory + 'mods/' + LowerCase(fs_mod.Value) + '.smod', 4096);
   end;
+  {$ENDIF}
 
+  {$IFNDEF WEB}
   // Create the basic folder structure
   CreateDirIfMissing(UserDirectory + '/configs');
   CreateDirIfMissing(UserDirectory + '/configs/bots');
@@ -628,7 +635,9 @@ begin
   {$IFDEF SCRIPT}
   CreateDirIfMissing(UserDirectory + '/scripts');
   {$ENDIF}
+  {$ENDIF}
 
+  {$IFNDEF WEB}
   // Copy default configs and accessory files if they are missing
   PHYSFS_CopyFileFromArchive('configs/server.cfg', UserDirectory + '/configs/server.cfg');
   PHYSFS_CopyFileFromArchive('configs/weapons.ini', UserDirectory + '/configs/weapons.ini');
@@ -641,12 +650,15 @@ begin
 
   for s in PHYSFS_GetEnumeratedFiles('configs/bots') do
     PHYSFS_CopyFileFromArchive('configs/bots/' + s, UserDirectory + '/configs/bots/' + s);
+  {$ENDIF}
 
   LoadConfig('server.cfg');
 
   CvarsInitialized := True;
 
+  {$IFNDEF WEB}
   NewLogFiles;
+  {$ENDIF}
 
   Debug('ActivateServer');
 
@@ -721,7 +733,9 @@ begin
 
   SinusCounter := 0;
 
+  {$IFNDEF WEB}
   AddLineToLogFile(GameLog, 'Loading Maps List', ConsoleLogFileName);
+  {$ENDIF}
   MapsList := TStringList.Create;
   LoadMapsList();
 
@@ -729,6 +743,7 @@ begin
     for j := 1 to MAX_SPRITES do
       OldHelmetMsg[i, j].WearHelmet := 1;
 
+  {$IFNDEF WEB}
   // Banned IPs text file
   if not CreateFileIfMissing(UserDirectory + 'configs/banned.txt') then
     raise Exception.Create('Failed to create configs/banned.txt');
@@ -743,6 +758,9 @@ begin
 
   if FileExists(UserDirectory + 'configs/remote.txt') then
     RemoteIPs.LoadFromFile(UserDirectory + 'configs/remote.txt');
+  {$ELSE}
+  RemoteIPs := TStringList.Create;
+  {$ENDIF}
 
   AdminIPs := TStringList.Create;
   AdminIPs.Assign(RemoteIPs);
@@ -773,9 +791,11 @@ begin
   {$ENDIF}
 
   WriteLn(' Server name: ' + sv_hostname.Value);
+  {$IFNDEF WEB}
   UpdateGameStats;
   WriteLogFile(KillLog, KillLogFileName);
   WriteLogFile(GameLog, ConsoleLogFileName);
+  {$ENDIF}
 
   RunDeferredCommands;
 end;
@@ -786,7 +806,9 @@ begin
   ProgReady := False;
 
   MainConsole.Console('Shutting down server...', GAME_MESSAGE_COLOR);
+  {$IFNDEF WEB}
   SysUtils.DeleteFile(UserDirectory + 'logs/' + sv_pidfilename.Value);
+  {$ENDIF}
 
   if UDP <> nil then
   begin
@@ -830,6 +852,7 @@ begin
   {$ENDIF}
 
   try
+    {$IFNDEF WEB}
     AddLineToLogFile(GameLog, '   End of Log.', ConsoleLogFileName);
     Debug('Updating gamestats');
     UpdateGameStats;
@@ -837,6 +860,7 @@ begin
     WriteLogFile(KillLog, KillLogFileName);
     Debug('Saving gamelog');
     WriteLogFile(GameLog, ConsoleLogFileName);
+    {$ENDIF}
     Debug('Freeing gamelog');
     FreeAndNil(GameLog);
     Debug('Freeing killlog');
@@ -1021,7 +1045,9 @@ begin
   for i := 1 to 4 do
     TeamScore[i] := 0;
 
+  {$IFNDEF WEB}
   AddLineToLogFile(GameLog, 'Loading Map.', ConsoleLogFileName);
+  {$ENDIF}
 
   // playing over internet - optimize
   if net_lan.Value = LAN then
@@ -1068,14 +1094,18 @@ begin
     end;
   end;
 
+  {$IFNDEF WEB}
   MapCheckSum := GetMapChecksum(StartMap);
+  {$ENDIF}
 
   {$IFDEF SCRIPT}
   ScrptDispatcher.OnAfterMapChange(Map.Name);
   {$ENDIF}
 
   // Create Weapons
+  {$IFNDEF WEB}
   AddLineToLogFile(GameLog, 'Creating Weapons.', ConsoleLogFileName);
+  {$ENDIF}
 
   if sv_realisticmode.Value then
   begin
@@ -1212,7 +1242,9 @@ begin
   UpdateWaveRespawnTime;
   WaveRespawnCounter := WaveRespawnTime;
 
+  {$IFNDEF WEB}
   AddLineToLogFile(GameLog, 'Starting Game Server.', ConsoleLogFileName);
+  {$ENDIF}
 
   UDP := TServerNetwork.Create(net_ip.Value, net_port.Value);
 
@@ -1257,7 +1289,9 @@ begin
     for k := 1 to bots_random_delta.Value do
       AddBotPlayer(RandomBot, 4);
 
+  {$IFNDEF WEB}
   UpdateGameStats;
+  {$ENDIF}
 
 end;
 

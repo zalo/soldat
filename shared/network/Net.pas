@@ -813,6 +813,15 @@ type
     Data: array[0..0] of Char;
   end;
 
+{$IFDEF SERVER}
+{$IFDEF WEB}
+function WebServerGetOutbound(OutPtr: Pointer; MaxSize: Integer): Integer;
+procedure WebServerOnConnect(ConnId: Integer);
+procedure WebServerOnMessage(ConnId: Integer; Data: Pointer; Size: Integer);
+procedure WebServerOnDisconnect(ConnId: Integer);
+{$ENDIF}
+{$ENDIF}
+
 var
   MainTickCounter: Integer;
   // Stores all network-generated TPlayer objects
@@ -836,6 +845,11 @@ var
   // Albeit this approach is very robust I'd prefer if we get rid of this and fix all .Active
   // checks (if any) later. Alternatively we could move a good bit if info from Player to Sprite.
   DummyPlayer: TPlayer;
+
+  {$IFDEF WEB}
+  WebOutboundQueue: array of Byte;  // Dynamic byte array for outbound messages
+  WebOutboundSize: Integer = 0;     // Current size of queued data
+  {$ENDIF}
 
   ServerTickCounter: Integer;
   NoClientUpdateTime: array[1..MAX_PLAYERS] of Integer;
@@ -1065,12 +1079,19 @@ procedure TClientNetwork.ProcessLoop;
 var
   RecvBuf: array[0..8191] of Byte;
   BytesRead: LongInt;
+  FakeMsg: SteamNetworkingMessage_t;
 begin
   BytesRead := ws_recv(@RecvBuf[0], SizeOf(RecvBuf));
   while BytesRead > 0 do
   begin
-    // TODO: Wrap RecvBuf in a compatible message struct for HandleMessages
-    // For now, process raw bytes directly
+    if BytesRead >= SizeOf(TMsgHeader) then
+    begin
+      FillChar(FakeMsg, SizeOf(FakeMsg), 0);
+      FakeMsg.m_pData := @RecvBuf[0];
+      FakeMsg.m_cbSize := BytesRead;
+      FakeMsg.m_conn := FPeer;
+      HandleMessages(@FakeMsg);
+    end;
     BytesRead := ws_recv(@RecvBuf[0], SizeOf(RecvBuf));
   end;
 end;
@@ -1324,8 +1345,10 @@ begin
     {$ENDIF}
   end;
 
+  {$IFNDEF WEB}
   if not DemoPlayer.Active then
     IncomingMsg.Release();
+  {$ENDIF}
 end;
 
 function TClientNetwork.SendData(var Data; Size: Integer; Flags: Integer): Boolean;
@@ -1348,11 +1371,19 @@ end;
 
 {$ELSE}
 constructor TServerNetwork.Create(Host: String; Port: Word);
+{$IFNDEF WEB}
 var
   ServerAddress: SteamNetworkingIPAddr;
   InitSettings: SteamNetworkingConfigValue_t;
   //TempIP: array[0..128] of Char;
+{$ENDIF}
 begin
+  {$IFDEF WEB}
+  inherited Create();
+  Players := TFPGObjectList<TPlayer>.Create;
+  Active := True;
+  // No GNS sockets needed — PartyKit handles transport
+  {$ELSE}
   inherited Create();
   if FInit then
   begin
@@ -1385,14 +1416,19 @@ begin
 
   if FHost <> k_HSteamNetPollGroup_Invalid then
     Active := True;
-
+  {$ENDIF}
 end;
 
 procedure TServerNetwork.ProcessLoop;
+{$IFNDEF WEB}
 var
   NumMsgs: Integer;
   IncomingMsg: PSteamNetworkingMessage_t;
+{$ENDIF}
 begin
+  {$IFDEF WEB}
+  Exit; // On web, messages are delivered via server_on_message export
+  {$ELSE}
   {$IFNDEF STEAM}
   NetworkingSockets.RunCallbacks();
   {$ENDIF}
@@ -1407,6 +1443,7 @@ begin
     Exit;
   end else
     HandleMessages(IncomingMsg);
+  {$ENDIF}
 end;
 
 procedure TServerNetwork.ProcessEvents(pInfo: PSteamNetConnectionStatusChangedCallback_t);
@@ -1588,11 +1625,17 @@ begin
     {$ENDIF}
   end;
 
+  {$IFNDEF WEB}
   IncomingMsg.Release();
+  {$ENDIF}
 end;
 
 destructor TServerNetwork.Destroy;
 begin
+  {$IFDEF WEB}
+  Players.Clear;
+  Inherited;
+  {$ELSE}
   if FHost <> k_HSteamNetConnection_Invalid then
     NetworkingSockets.CloseListenSocket(FHost);
 
@@ -1602,15 +1645,35 @@ begin
   Players.Clear;
 
   Inherited;
+  {$ENDIF}
 end;
 
 function TServerNetwork.SendData(var Data; Size: Integer; Peer: HSteamNetConnection; Flags: Integer): Boolean;
+{$IFDEF WEB}
+var
+  OldLen: Integer;
+{$ENDIF}
 begin
   Result := False;
 
   if Size < SizeOf(TMsgHeader) then
     Exit; // truncated packet
 
+  {$IFDEF WEB}
+  // Queue message for PartyKit to flush via server_get_outbound
+  // Format: [connId: i32][payloadLen: i32][payload bytes]
+  OldLen := WebOutboundSize;
+  WebOutboundSize := OldLen + 8 + Size;
+  if Length(WebOutboundQueue) < WebOutboundSize then
+    SetLength(WebOutboundQueue, WebOutboundSize + 4096);
+  // Write connId (Peer handle = connId assigned by PartyKit)
+  PInteger(@WebOutboundQueue[OldLen])^ := Integer(Peer);
+  // Write payload length
+  PInteger(@WebOutboundQueue[OldLen + 4])^ := Size;
+  // Write payload
+  Move(Data, WebOutboundQueue[OldLen + 8], Size);
+  Result := True;
+  {$ELSE}
   if FHost = k_HSteamNetConnection_Invalid then
     Exit; // server not set up
 
@@ -1621,19 +1684,23 @@ begin
   NetworkingSockets.SendMessageToConnection(Peer, @Data, Size, Flags, nil);
 
   Result := True;
+  {$ENDIF}
 end;
 
 procedure TServerNetwork.UpdateNetworkStats(Player: Byte);
+{$IFNDEF WEB}
 var
   Stats: SteamNetConnectionRealTimeStatus_t;
+{$ENDIF}
 begin
+  {$IFNDEF WEB}
   Stats := GetConnectionRealTimeStatus(Sprite[Player].Player.Peer);
   Sprite[Player].Player.RealPing := Stats.m_nPing;
   if Stats.m_flConnectionQualityLocal > 0.0 then
     Sprite[Player].Player.ConnectionQuality := Trunc(Stats.m_flConnectionQualityLocal * 100)
   else
     Sprite[Player].Player.ConnectionQuality := 0;
-
+  {$ENDIF}
 end;
 
 constructor TPlayer.Create();
@@ -1717,5 +1784,84 @@ begin
     end;
   {$ENDIF}
 end;
+
+{$IFDEF SERVER}
+{$IFDEF WEB}
+function WebServerGetOutbound(OutPtr: Pointer; MaxSize: Integer): Integer;
+begin
+  Result := WebOutboundSize;
+  if Result > MaxSize then
+    Result := MaxSize;
+  if Result > 0 then
+  begin
+    Move(WebOutboundQueue[0], OutPtr^, Result);
+    // Shift remaining data
+    if Result < WebOutboundSize then
+      Move(WebOutboundQueue[Result], WebOutboundQueue[0], WebOutboundSize - Result);
+    WebOutboundSize := WebOutboundSize - Result;
+  end;
+end;
+
+procedure WebServerOnConnect(ConnId: Integer);
+var
+  Player: TPlayer;
+begin
+  Player := TPlayer.Create;
+  Player.Peer := HSteamNetConnection(ConnId);
+  Player.IP := '127.0.0.1';
+  Player.Port := 0;
+  Players.Add(Player);
+  WriteLn('[NET-Web] Player connected: connId=', ConnId);
+end;
+
+procedure WebServerOnMessage(ConnId: Integer; Data: Pointer; Size: Integer);
+var
+  Msg: SteamNetworkingMessage_t;
+  Player: TPlayer;
+  i: Integer;
+begin
+  if Size < SizeOf(TMsgHeader) then Exit;
+
+  // Find player by connId
+  Player := nil;
+  for i := 0 to Players.Count - 1 do
+    if Players[i].Peer = HSteamNetConnection(ConnId) then
+    begin
+      Player := Players[i];
+      Break;
+    end;
+  if Player = nil then Exit;
+
+  FillChar(Msg, SizeOf(Msg), 0);
+  Msg.m_pData := Data;
+  Msg.m_cbSize := Size;
+  Msg.m_conn := HSteamNetConnection(ConnId);
+  Msg.m_nConnUserData := PtrUInt(Player);
+
+  UDP.HandleMessages(@Msg);
+end;
+
+procedure WebServerOnDisconnect(ConnId: Integer);
+var
+  i: Integer;
+  Player: TPlayer;
+begin
+  for i := 0 to Players.Count - 1 do
+    if Players[i].Peer = HSteamNetConnection(ConnId) then
+    begin
+      Player := Players[i];
+      if Player.SpriteNum <> 0 then
+      begin
+        ServerPlayerDisconnect(Player.SpriteNum, KICK_NORESPONSE);
+        Sprite[Player.SpriteNum].Kill;
+        Sprite[Player.SpriteNum].Player := DummyPlayer;
+      end;
+      Players.Remove(Player);
+      WriteLn('[NET-Web] Player disconnected: connId=', ConnId);
+      Break;
+    end;
+end;
+{$ENDIF}
+{$ENDIF}
 
 end.

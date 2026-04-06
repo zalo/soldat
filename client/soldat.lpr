@@ -138,7 +138,17 @@ begin
   GfxViewport(0, 0, WindowWidth, WindowHeight);
 end;
 
-exports web_init, web_tick, web_alloc, web_free, web_resize;
+procedure join_room(roomPtr: PChar); cdecl; export;
+begin
+  // Called from JS when user clicks Join or URL has #room=name
+  // The PartyKit host is set in the JS bridge; roomPtr is the room name
+  JoinIP := 'partykit'; // Signal to use WebSocket
+  JoinPort := String(roomPtr);
+  WriteLn('[web] Joining room: ', JoinPort);
+  JoinServer();
+end;
+
+exports web_init, web_tick, web_alloc, web_free, web_resize, join_room;
 {$ENDIF}
 
 begin

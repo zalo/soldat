@@ -611,7 +611,7 @@ async function main() {
     }
   }
 
-  // 7. Hide loading, show canvas
+  // 7. Hide loading, show canvas and lobby
   document.getElementById('loading').style.display = 'none';
   canvas.style.display = 'block';
 
@@ -634,16 +634,47 @@ async function main() {
   window.addEventListener('resize', handleResize);
   handleResize();
 
-  // 8. Check for room in URL
-  const room = getRoomFromURL();
-  if (room && instance.exports.join_room) {
-    // Write room name into WASM memory and call join
+  // Helper: call join_room WASM export with a string
+  function joinRoom(roomName) {
+    if (!instance.exports.join_room) return;
     const encoder = new TextEncoder();
-    const roomBytes = encoder.encode(room);
+    const roomBytes = encoder.encode(roomName);
     const ptr = instance.exports.web_alloc(roomBytes.length + 1);
     new Uint8Array(memory.buffer).set(roomBytes, ptr);
     new Uint8Array(memory.buffer)[ptr + roomBytes.length] = 0;
     instance.exports.join_room(ptr);
+    document.getElementById('lobby').style.display = 'none';
+  }
+
+  // 8. Lobby flow
+  const room = getRoomFromURL();
+  const lobbyEl = document.getElementById('lobby');
+
+  if (room) {
+    // Auto-join from URL hash
+    joinRoom(room);
+  } else {
+    // Show lobby
+    lobbyEl.style.display = 'flex';
+
+    document.getElementById('btn-create-game').addEventListener('click', () => {
+      const roomName = 'game-' + Math.random().toString(36).substring(2, 8);
+      window.location.hash = '#room=' + roomName;
+      joinRoom(roomName);
+    });
+
+    document.getElementById('btn-join').addEventListener('click', () => {
+      const roomName = document.getElementById('input-room').value.trim();
+      if (roomName) {
+        window.location.hash = '#room=' + roomName;
+        joinRoom(roomName);
+      }
+    });
+
+    document.getElementById('btn-offline').addEventListener('click', () => {
+      lobbyEl.style.display = 'none';
+      // Offline mode — player is already spawned by WebLoadDefaultMap
+    });
   }
 
   // 9. Game loop via requestAnimationFrame
