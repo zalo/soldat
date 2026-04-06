@@ -147,6 +147,7 @@ export default class SoldatServer implements Party.Server {
     if ((this.wasm.exports as any).server_on_connect) {
       try {
         (this.wasm.exports as any).server_on_connect(connId);
+        this.flushOutboundMessages();
       } catch (e: any) {
         console.error('[soldat-server] server_on_connect error:', e?.message?.substring(0, 80));
       }
@@ -187,8 +188,13 @@ export default class SoldatServer implements Party.Server {
           (this.wasm.exports as any).server_on_message(connId, ptr, bytes.length);
         }
       }
+      // Flush immediately after processing
+      this.flushOutboundMessages();
     } catch (e: any) {
-      console.error('[soldat-server] onMessage error:', e?.message?.substring(0, 80));
+      // Send error to client for debugging
+      const errMsg = `SERVER_ERROR:${e?.message?.substring(0, 200) || 'unknown'}`;
+      sender.send(errMsg);
+      console.error('[soldat-server] onMessage error:', errMsg);
     }
   }
 
@@ -214,17 +220,19 @@ export default class SoldatServer implements Party.Server {
     const getOutbound = (this.wasm.exports as any).server_get_outbound;
     if (!getOutbound) return;
 
-    // Allocate once, reuse
-    if (!this.outboundPtr) {
-      const alloc = (this.wasm.exports as any).alloc_buffer;
-      if (!alloc) return;
-      this.outboundPtr = alloc(65536);
-    }
-
+    const alloc = (this.wasm.exports as any).alloc_buffer;
+    if (!alloc) return;
     const maxSize = 65536;
-    const outPtr = this.outboundPtr;
-    const bytesWritten = getOutbound(outPtr, maxSize);
+    const outPtr = alloc(maxSize);
+    let bytesWritten = 0;
+    try {
+      bytesWritten = getOutbound(outPtr, maxSize);
+    } catch (e: any) {
+      console.error('[flush] getOutbound error:', e?.message?.substring(0, 60));
+      return;
+    }
     if (bytesWritten <= 0) return;
+    console.log(`[flush] ${bytesWritten} bytes to send`);
 
     // Parse outbound message queue:
     // Format: [targetConnId: i32][payloadLen: i32][payload bytes]...
@@ -242,12 +250,21 @@ export default class SoldatServer implements Party.Server {
       if (targetConnId === 0) {
         this.room.broadcast(payload);
       } else {
+        let sent = false;
         for (const [partyId, cId] of this.connIdMap) {
           if (cId === targetConnId) {
             const targetConn = this.room.getConnection(partyId);
-            if (targetConn) targetConn.send(payload);
+            if (targetConn) {
+              targetConn.send(payload);
+              sent = true;
+            } else {
+              console.warn(`[flush] conn ${targetConnId} not found via getConnection`);
+            }
             break;
           }
+        }
+        if (!sent) {
+          console.warn(`[flush] no mapping for connId=${targetConnId}, map size=${this.connIdMap.size}`);
         }
       }
     }
