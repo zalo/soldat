@@ -15,15 +15,21 @@ export default class SoldatServer implements Party.Server {
     // Load server-only asset bundle (maps, configs, anims — 3.2MB)
     const bundledAssets = new Map<string, Uint8Array>();
     try {
-      const smodResp = await fetch(new URL('./soldat-server.smod', import.meta.url));
-      if (smodResp.ok) {
+      // Fetch server smod from the static serve (same origin)
+      const origin = this.room.env?.PARTYKIT_HOST
+        ? `https://${this.room.env.PARTYKIT_HOST}`
+        : 'http://127.0.0.1:1999';
+      const smodResp = await fetch(`${origin}/partykit/soldat-server.smod`).catch(() => null);
+      if (smodResp && smodResp.ok) {
         const { unzipSync } = await import('fflate');
         const smodBytes = new Uint8Array(await smodResp.arrayBuffer());
         const files = unzipSync(smodBytes);
         for (const [path, data] of Object.entries(files)) {
-          if (data.length > 0) bundledAssets.set(path, data);
+          if (data.length > 0) bundledAssets.set(path, data as Uint8Array);
         }
         console.log(`[soldat-server] Loaded ${bundledAssets.size} assets from server smod`);
+      } else {
+        console.warn('[soldat-server] Could not fetch server smod — server will run without assets');
       }
     } catch (e) {
       console.warn('[soldat-server] Failed to load server smod:', e);
@@ -56,12 +62,16 @@ export default class SoldatServer implements Party.Server {
         },
         fd_close: () => 0,
         fd_fdstat_get: () => 0,
+        fd_fdstat_set_flags: () => 0,
         fd_filestat_get: () => 0,
         fd_filestat_set_size: () => 0,
+        fd_filestat_set_times: () => 0,
         fd_prestat_get: () => 8,
         fd_prestat_dir_name: () => 8,
         fd_read: () => 0,
+        fd_readdir: () => 0,
         fd_seek: () => 0,
+        fd_sync: () => 0,
         fd_tell: () => 0,
         fd_write: (fd: number, iovs: number, iovsLen: number, nwrittenPtr: number) => {
           const dv = new DataView(this.memory.buffer);
@@ -78,6 +88,7 @@ export default class SoldatServer implements Party.Server {
         },
         path_create_directory: () => 0,
         path_filestat_get: () => 0,
+        path_filestat_set_times: () => 0,
         path_open: () => 0,
         path_readlink: () => 0,
         path_remove_directory: () => 0,
