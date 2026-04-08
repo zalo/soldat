@@ -27,10 +27,12 @@ export default class SoldatServer implements Party.Server {
         const path = await import('node:path');
         // Try multiple paths — bundled location varies
         const candidates = [
-          path.resolve(__dirname, 'soldat-server.smod'),
           path.resolve(process.cwd(), 'soldat-server.smod'),
           path.resolve(process.cwd(), 'web/partykit/soldat-server.smod'),
+          path.resolve(process.cwd(), '..', 'web', 'partykit', 'soldat-server.smod'),
         ];
+        // __dirname may not be defined in workerd
+        try { candidates.unshift(path.resolve(__dirname, 'soldat-server.smod')); } catch {}
         for (const p of candidates) {
           try {
             if (fs.existsSync(p)) {
@@ -296,7 +298,10 @@ export default class SoldatServer implements Party.Server {
       return;
     }
     if (bytesWritten <= 0) return;
-    console.log(`[flush] ${bytesWritten} bytes to send`);
+    if (bytesWritten > 100 || !this._flushCount) {
+      this._flushCount = (this._flushCount || 0) + 1;
+      console.log(`[flush] ${bytesWritten} bytes to send, connMap size=${this.connIdMap.size}`);
+    }
 
     // Parse outbound message queue:
     // Format: [targetConnId: i32][payloadLen: i32][payload bytes]...
@@ -311,6 +316,7 @@ export default class SoldatServer implements Party.Server {
       const payload = new Uint8Array(this.memory.buffer, outPtr + offset, payloadLen).slice();
       offset += payloadLen;
 
+      const msgId = payload.length > 0 ? payload[0] : -1;
       if (targetConnId === 0) {
         this.room.broadcast(payload);
       } else {
@@ -328,7 +334,7 @@ export default class SoldatServer implements Party.Server {
           }
         }
         if (!sent) {
-          console.warn(`[flush] no mapping for connId=${targetConnId}, map size=${this.connIdMap.size}`);
+          console.warn(`[flush] no mapping for connId=${targetConnId} msgId=${msgId}, map size=${this.connIdMap.size}, keys=[${[...this.connIdMap.values()].join(',')}]`);
         }
       }
     }
