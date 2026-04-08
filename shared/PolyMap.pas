@@ -545,6 +545,7 @@ var
   kx, ky: Integer;
 begin
   Result := False;
+  if SectorsDivision = 0 then Exit;
   kx := Round(Pos.x / SectorsDivision);
   ky := Round(Pos.y / SectorsDivision);
 
@@ -580,6 +581,7 @@ var
   kx, ky: Integer;
 begin
   Result := False;
+  if SectorsDivision = 0 then Exit;
   kx := Round(Pos.x / SectorsDivision);
   ky := Round(Pos.y / SectorsDivision);
 
@@ -616,6 +618,7 @@ var
   e, f, g, h, r: Single;
 begin
   Result := False;
+  if SectorsDivision = 0 then Exit;
   d := Default(TVector2);
   Distance := Vec2Length(Vec2Subtract(a, b));
   if Distance > MaxDist then

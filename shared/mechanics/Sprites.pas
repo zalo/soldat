@@ -2476,6 +2476,7 @@ begin
   {$ENDIF}
 
   Result := False;
+  if Map.SectorsDivision = 0 then Exit;
   P1 := Default(TVector2);
   P2 := Default(TVector2);
   SPos.X := X;
@@ -2584,6 +2585,7 @@ begin
   {$ENDIF}
 
   Result := False;
+  if Map.SectorsDivision = 0 then Exit;
   SPos.X := X;
   SPos.Y := Y;
 
@@ -2858,6 +2860,7 @@ begin
   {$ENDIF}
 
   Result := False;
+  if Map.SectorsDivision = 0 then Exit;
   Pos.X := X;
   Pos.Y := Y;
 
@@ -2922,6 +2925,7 @@ begin
   {$ENDIF}
 
   Result := False;
+  if Map.SectorsDivision = 0 then Exit;
   Pos.X := X - 1;
   Pos.Y := Y + 4;
 

@@ -27,7 +27,7 @@ uses
   {$IFDEF MSWINDOWS}Windows,{$ENDIF}
   SysUtils,
   {$IFDEF AUTOUPDATER}AutoUpdater,{$ENDIF}
-  {$IFDEF WEB}ClientGame, ControlGame, Net, Game, GameRendering, dglOpenGL, Constants, Math, Gfx,{$ENDIF}
+  {$IFDEF WEB}ClientGame, ControlGame, Net, Game, GameRendering, dglOpenGL, Constants, Math, Gfx, Sprites,{$ENDIF}
   Client in 'Client.pas';
 
 {$IFDEF MSWINDOWS}
@@ -55,6 +55,8 @@ const
 {$IFDEF WEB}
 // Imported from JS — throws to abort _start cleanly without running finalizers
 procedure web_stop(); cdecl; external 'env';
+
+procedure web_debug_checkpoint(id: LongInt); cdecl; external 'env';
 
 procedure web_init(); cdecl; export;
 begin
@@ -91,17 +93,28 @@ begin
 
   // Load textures incrementally
   DoTextureLoading(False);
-  if Assigned(UDP) then
-    UDP.ProcessLoop;
-  GameInput;
 
-  GameLoop;
+  // try/except required: FPC wasm32 exception handling needs an active frame
+  // or unhandled exceptions from message handlers silently abort web_tick
+  try
+    if Assigned(UDP) then
+      UDP.ProcessLoop;
+    GameInput;
+    GameLoop;
+  except
+    on E: Exception do
+      WriteLn('[web_tick] Exception: ', E.ClassName, ': ', E.Message);
+  end;
+
+  // Force render on web
+  RenderFrame(0, 0, MapChangeCounter >= 0);
   Inc(WebTickCount);
   if (WebTickCount <= 3) or (WebTickCount mod 300 = 0) then
-    WriteLn('[web_tick] #', WebTickCount,
-      ' TickTime=', TickTime,
-      ' TickTimeLast=', TickTimeLast,
-      ' MapChangeCounter=', MapChangeCounter);
+    WriteLn('[web_tick] #' + IntToStr(WebTickCount) +
+      ' MySprite=' + IntToStr(MySprite) +
+      ' ProgReady=' + IntToStr(Ord(ProgReady)) +
+      ' GameLoopRun=' + IntToStr(Ord(GameLoopRun)) +
+      ' MapChange=' + IntToStr(MapChangeCounter));
 end;
 
 function web_alloc(size: LongWord): Pointer; cdecl; export;
@@ -175,8 +188,14 @@ begin
   else Result := 1;
 end;
 
+function web_get_camera_x(): Single; cdecl; export;
+begin Result := CameraX; end;
+function web_get_camera_y(): Single; cdecl; export;
+begin Result := CameraY; end;
+
 exports web_init, web_tick, web_alloc, web_free, web_resize, join_room, web_spawn_offline,
-  web_get_my_sprite, web_get_map_change_counter, web_get_requesting_game, web_get_connection_state;
+  web_get_my_sprite, web_get_map_change_counter, web_get_requesting_game, web_get_connection_state,
+  web_get_camera_x, web_get_camera_y;
 {$ENDIF}
 
 begin

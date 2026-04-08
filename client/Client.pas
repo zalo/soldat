@@ -402,6 +402,9 @@ procedure ExitToMenu;
 var
   i: Integer;
 begin
+  {$IFDEF WEB}
+  WriteLn('[WEB] ExitToMenu called!');
+  {$ENDIF}
   GOALTICKS := DEFAULT_GOALTICKS;
 
   // Reset network state and show the status string (if any)

@@ -385,6 +385,16 @@ begin
   if FrameTiming.PrevRenderTime > CurrentTime then
     FrameTiming.PrevRenderTime := CurrentTime - FrameTiming.MinDeltaTime;
 
+  {$IFDEF WEB}
+  // On web, always render — requestAnimationFrame already throttles to vsync.
+  // The native FPS limiter condition fails after multiplayer join because
+  // ResetFrameTiming + ProcessLoop timing disrupts the accumulator state.
+  if ShouldRenderFrames then
+  begin
+    FrameTiming.PrevRenderTime := CurrentTime;
+    RenderFrame(FrameTiming.Elapsed, FramePercent, GamePaused);
+  end;
+  {$ELSE}
   if ShouldRenderFrames and
       ((CurrentTime - FrameTiming.PrevRenderTime) >= FrameTiming.MinDeltaTime) then
   begin
@@ -403,6 +413,7 @@ begin
     else
       RenderFrame(FrameTiming.Elapsed - dt * (1 - FramePercent), FramePercent, False);
   end;
+  {$ENDIF}
 
   if (MapChangeCounter < 0) and (MapChangeCounter > -59) then
     if MapChangeName = 'EXIT*!*' then

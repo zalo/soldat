@@ -103,9 +103,10 @@ begin
   {$IFDEF WEB}
   DefaultSystemCodePage := CP_UTF8;
   server_init;
-  // Don't call web_stop — let Halt(0) run naturally.
-  // proc_exit returns (doesn't throw), then WASM hits unreachable,
-  // which is caught by the JS caller's try/catch.
+  // web_stop throws to abort BEFORE Halt(0) runs unit finalizers.
+  // Without this, FPC finalizers destroy Players, Map, Weapons etc.
+  // before server_on_connect/message can use them.
+  web_stop;
   {$ELSE}
   {$IFDEF AUTOUPDATER}
   StartAutoUpdater;

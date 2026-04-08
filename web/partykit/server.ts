@@ -16,8 +16,64 @@ export default class SoldatServer implements Party.Server {
   constructor(readonly room: Party.Room) {}
 
   async onStart() {
-    // Skip smod loading for now — causes onStart to exceed CPU limits
+    // Load server smod (3.2MB) — contains maps, weapons, configs needed by game server
     const bundledAssets = new Map<string, Uint8Array>();
+    try {
+      let smodBytes: Uint8Array | null = null;
+
+      // Try reading from filesystem (works in local dev with miniflare/workerd)
+      try {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        // Try multiple paths — bundled location varies
+        const candidates = [
+          path.resolve(__dirname, 'soldat-server.smod'),
+          path.resolve(process.cwd(), 'soldat-server.smod'),
+          path.resolve(process.cwd(), 'web/partykit/soldat-server.smod'),
+        ];
+        for (const p of candidates) {
+          try {
+            if (fs.existsSync(p)) {
+              smodBytes = new Uint8Array(fs.readFileSync(p));
+              console.log(`[soldat-server] Loaded smod from ${p} (${smodBytes.length} bytes)`);
+              break;
+            }
+          } catch {}
+        }
+      } catch (e: any) {
+        console.warn(`[soldat-server] fs not available: ${e?.message?.substring(0, 60)}`);
+      }
+
+      // Fallback: fetch from known URLs (production)
+      if (!smodBytes) {
+        const urls = [
+          'https://opensoldat.zalo.partykit.dev/soldat-server.smod',
+          'https://soldat.sels.tech/soldat-server.smod',
+        ];
+        for (const url of urls) {
+          try {
+            const resp = await fetch(url);
+            if (resp.ok) {
+              smodBytes = new Uint8Array(await resp.arrayBuffer());
+              console.log(`[soldat-server] Fetched smod from ${url} (${smodBytes.length} bytes)`);
+              break;
+            }
+          } catch {}
+        }
+      }
+
+      if (smodBytes && smodBytes.length > 100) {
+        const files = unzipSync(smodBytes);
+        for (const [fpath, data] of Object.entries(files)) {
+          bundledAssets.set(fpath, data);
+        }
+        console.log(`[soldat-server] Loaded ${bundledAssets.size} assets from smod`);
+      } else {
+        console.warn('[soldat-server] No smod data loaded — map will not work!');
+      }
+    } catch (e: any) {
+      console.error('[soldat-server] Failed to load smod:', e?.message?.substring(0, 100));
+    }
 
     // Memory proxy — updated after instantiation
     let memoryRef: WebAssembly.Memory | null = null;
@@ -93,10 +149,11 @@ export default class SoldatServer implements Party.Server {
         sched_yield: () => 0,
         proc_exit: (code: number) => {
           console.log('[soldat-server] proc_exit(' + code + ')');
-          // Don't throw — let WASM return naturally. The _start function
-          // won't actually return to the caller since proc_exit is __noreturn__,
-          // but WASM will trap with unreachable after this returns.
-          // We catch that trap in the _start try/catch.
+          // MUST throw to abort before FPC unit finalizers run.
+          // Finalizers destroy Players list, weapons, map data etc.
+          // Throwing here preserves the initialized game state for
+          // subsequent server_tick/server_on_message calls.
+          throw new Error('proc_exit(' + code + ')');
         },
         random_get: (bufPtr: number, bufLen: number) => {
           // Cloudflare Workers have crypto.getRandomValues
@@ -200,7 +257,7 @@ export default class SoldatServer implements Party.Server {
     } catch (e: any) {
       // Send error to client for debugging
       const errMsg = `SERVER_ERROR:${e?.message?.substring(0, 200) || 'unknown'}`;
-      sender.send(errMsg);
+      try { sender.send(errMsg); } catch {}
       console.error('[soldat-server] onMessage error:', errMsg);
     }
   }

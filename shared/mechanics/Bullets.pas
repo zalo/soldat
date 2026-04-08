@@ -1087,6 +1087,7 @@ begin
 
   Pos := Default(TVector2);
   Perp := Default(TVector2);
+  if Map.SectorsDivision = 0 then Exit;
 
   Result := Pos;
 

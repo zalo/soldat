@@ -39,8 +39,17 @@ export function createNetworkBridge(memory) {
       socket.addEventListener('message', (e) => {
         if (e.data instanceof ArrayBuffer) {
           incomingQueue.push(e.data);
+          if (incomingQueue.length <= 5)
+            console.log(`[ws] Recv binary: ${e.data.byteLength} bytes, queue=${incomingQueue.length}, id=${new Uint8Array(e.data)[0]}`);
         } else if (typeof e.data === 'string') {
           incomingQueue.push(new TextEncoder().encode(e.data).buffer);
+          console.log(`[ws] Recv text: "${e.data.substring(0, 60)}", queue=${incomingQueue.length}`);
+        } else if (e.data instanceof Blob) {
+          // Handle Blob data (some WebSocket implementations use Blob)
+          e.data.arrayBuffer().then(ab => {
+            incomingQueue.push(ab);
+            console.log(`[ws] Recv blob→AB: ${ab.byteLength} bytes, queue=${incomingQueue.length}`);
+          });
         }
       });
 

@@ -259,15 +259,28 @@ begin
     end;
 
   // Initialize Map
-
+  {$IFDEF WEB}
+  WriteLn('[NET] PlayersList: map="' + MapName + '" gamemode=' + IntToStr(sv_gamemode.Value));
+  // Skip map reload if already loaded (WebLoadDefaultMap loaded it at startup)
+  // Reloading destroys GL state (VBOs, textures) causing black screen
+  if Map.Name = MapName then
+    WriteLn('[NET] Map already loaded, skipping reload')
+  else
+  {$ENDIF}
   if GetMapInfo(MapName, UserDirectory, MapStatus) {and VerifyMapChecksum(MapStatus, PlayersListMsg.MapChecksum)} then
   begin
+    {$IFDEF WEB}
+    WriteLn('[NET] Loading map: ' + MapName);
+    {$ENDIF}
     if not Map.LoadMap(MapStatus, r_forcebg.Value, r_forcebg_color1.Value, r_forcebg_color2.Value) then
     begin
       RenderGameInfo(_('Could not load map: ') + WideString(MapName));
       ExitToMenu;
       Exit;
     end;
+    {$IFDEF WEB}
+    WriteLn('[NET] Map loaded OK: ' + Map.Name);
+    {$ENDIF}
   end
   else
   begin
@@ -351,8 +364,10 @@ begin
       end;
     end;
 
+  {$IFNDEF WEB}
   if not DemoPlayer.Active then
     RenderGameInfo(_('Waiting to join game...'));
+  {$ENDIF}
 
   MySprite := 0;
   CameraFollowSprite := 0;
@@ -360,8 +375,12 @@ begin
   SelTeam := 0;
   MenuTimer := 0;
   SurvivalEndRound := False;
+  {$IFNDEF WEB}
+  // On web, don't reset camera — causes black frame before NewPlayer arrives.
+  // web_tick forces camera to (400,350) when MySprite=0.
   CameraX := 0;
   CameraY := 0;
+  {$ENDIF}
 
   if not DemoPlayer.Active then
   begin
@@ -370,7 +389,11 @@ begin
   end;
 
   ClientVarsRecieved := False;
+  {$IFNDEF WEB}
+  // On web, don't reset MainTickCounter — it disrupts the game loop timing
+  // and causes rendering to stop (TickTime - TickTimeLast becomes 0)
   MainTickCounter := 0;
+  {$ENDIF}
   ClientTickCount := PlayersListMsg.ServerTicks;
   NoHeartbeatTime := 0;
   MapChangeCounter := -60;

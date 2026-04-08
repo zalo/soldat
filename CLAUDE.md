@@ -138,12 +138,12 @@ The smod asset file (`web/soldat.smod`, ~105MB, gitignored) must be present. Dow
 - **Key bindings**: `SDL_GetScancodeFromName` implemented in web SDL2 stub with full a-z, 0-9, F1-F12, arrows, modifiers
 - Console messages, escape menu, FPS counter all render
 - PointerLock input working (click canvas to capture mouse)
+- **Multiplayer works**: PartyKit WebSocket connection → server WASM processes game → player spawns with weapons/HUD
 
 ### Current issues to investigate
 
 - **Player movement**: Verify WASD moves the gostek (player sprite). May need to check `ControlSprite` → `Control.pas` flow on web.
 - **Gostek rendering**: The player character (gostek) may not be visible if gostek animation data isn't loaded or the sprite draw is failing.
-- **PartyKit multiplayer**: Server WASM needs exports (`server_init`, `server_tick`, etc.) and the client needs WebSocket networking.
 
 **Testing with Playwright**: The Playwright MCP plugin is available for automated browser testing. Use `browser_navigate` to `http://localhost:4000/shell.html`, `browser_console_messages` to read logs, and `browser_take_screenshot` to see the canvas. Start the HTTP server first: `cd web && python3 -m http.server 4000`. The smod download takes ~60-90s on first load (cached in IndexedDB after).
 
@@ -168,3 +168,5 @@ The smod asset file (`web/soldat.smod`, ~105MB, gitignored) must be present. Dow
 - **FPC Variant `call_indirect`**: Variant type operators use indirect calls that crash on wasm32. Fixed by removing `-dDEVELOPMENT` (which gated the Variant-using `DumpCvar` calls)
 - **Frame timing**: `SDL_GetPerformanceCounter/Frequency` stubs returned 0, causing `GameLoop` to never advance time. Fixed by implementing via `performance.now()`
 - **File not found**: `Sha1File`, `CreateDirIfMissing`, `WriteLogFile`, `PHYSFS_CopyFileFromArchive` all use the native filesystem which doesn't exist in WASM. Wrapped in `{$IFNDEF WEB}`
+- **FPC wasm32 unhandled exceptions silently kill functions**: When `ProcessLoop` message handlers raise a Pascal exception and there's no `try/except` frame in the call chain, FPC's wasm32 exception handling corrupts the runtime state — the function appears to return normally to JS (no error thrown) but subsequent calls to the same function become instant no-ops. Fixed by wrapping `ProcessLoop`/`GameInput`/`GameLoop` in `try/except` in `web_tick`. The exception frame alone prevents the issue even if no exception actually fires. This is a FPC wasm32 runtime quirk.
+- **Multiplayer join flow works**: Client connects via PartySocket → server sends SyncCvars + PlayersList → client auto-joins DM → server sends NewPlayer + ServerSpriteSnapshot. Player spawns with weapon menu, HUD active.

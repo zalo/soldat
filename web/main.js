@@ -1,8 +1,8 @@
 // web/main.js — Entry point: loads assets, instantiates WASM, runs game loop
 import { loadAssets } from './assets.js';
-import { createFilesystemBridge, createGLBridge, createAudioBridge, setGlobalWasmInstance } from './bridge.js?v=4';
-import { createInputBridge } from './input.js?v=4';
-import { createNetworkBridge, getRoomFromURL } from './network.js';
+import { createFilesystemBridge, createGLBridge, createAudioBridge, setGlobalWasmInstance } from './bridge.js?v=6';
+import { createInputBridge } from './input.js?v=6';
+import { createNetworkBridge, getRoomFromURL } from './network.js?v=6';
 
 const progressFill = document.getElementById('progress-bar-fill');
 const progressText = document.getElementById('progress-text');
@@ -71,8 +71,13 @@ async function main() {
     },
   };
 
+  // Debug: track WASM execution checkpoints
+  let wasmCheckpoint = 0;
+  window._wasmCheckpoint = () => wasmCheckpoint;
+
   // Merge all bridge imports into env
   const envImports = {
+    web_debug_checkpoint: (id) => { wasmCheckpoint = id; },
     ...fsBridge,
     ...glBridge,
     ...audioBridge,
@@ -642,7 +647,12 @@ async function main() {
     const ptr = instance.exports.web_alloc(roomBytes.length + 1);
     new Uint8Array(memory.buffer).set(roomBytes, ptr);
     new Uint8Array(memory.buffer)[ptr + roomBytes.length] = 0;
-    instance.exports.join_room(ptr);
+    try {
+      instance.exports.join_room(ptr);
+    } catch (e) {
+      console.log(`[JOIN-ERROR] join_room threw: ${e?.message || e}`);
+      console.log(`[JOIN-ERROR] stack: ${e?.stack?.split('\n').slice(0,5).join(' | ')}`);
+    }
     document.getElementById('lobby').style.display = 'none';
   }
 
@@ -686,18 +696,46 @@ async function main() {
 
   // 9. Game loop via requestAnimationFrame
   let tickCount = 0;
+  let glContextLost = false;
+  canvas.addEventListener('webglcontextlost', (e) => {
+    console.error('[GL] WebGL context LOST!', e);
+    glContextLost = true;
+    e.preventDefault();
+  });
+  canvas.addEventListener('webglcontextrestored', () => {
+    console.warn('[GL] WebGL context restored');
+    glContextLost = false;
+  });
   function frame() {
     if (instance.exports.web_tick) {
       try {
+        const t0 = performance.now();
         instance.exports.web_tick();
+        const dt = performance.now() - t0;
+        if (dt > 100 || tickCount <= 5 || tickCount % 300 === 0)
+          console.log(`[perf] tick=${tickCount} took ${dt.toFixed(1)}ms`);
       } catch (e) {
-        if (tickCount < 5) console.error('web_tick error:', e.message);
-        // Don't stop on WASM traps — some sprites have bad texture pointers
-        // that will resolve once all textures are properly loaded
+        // ALWAYS log errors - never suppress
+        console.error(`[CRASH] web_tick #${tickCount}:`, e?.message || e, e?.stack?.split('\n').slice(0,3).join(' | '));
       }
       tickCount++;
       if (tickCount <= 3 || tickCount % 300 === 0) {
-        console.log(`[soldat] web_tick #${tickCount}`);
+        const mySprite = instance.exports.web_get_my_sprite?.() ?? -1;
+        const gl = canvas.getContext('webgl2');
+        // If WASM rendering failed, draw a test pattern from JS to prove GL works
+        if (gl && mySprite > 0 && tickCount > 100) {
+          // Force a visible clear from JS side to prove canvas + GL work
+          gl.clearColor(0.5, 0.2, 0.8, 1.0); // purple
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+        let px = [0,0,0,0];
+        if (gl) {
+          const buf = new Uint8Array(4);
+          gl.readPixels(canvas.width/2|0, canvas.height/2|0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+          px = [...buf];
+        }
+        const cp = wasmCheckpoint;
+        console.log(`[game] tick=${tickCount} mySprite=${mySprite} checkpoint=${cp} px=[${px}] sz=${canvas.width}x${canvas.height}`);
       }
     }
     requestAnimationFrame(frame);

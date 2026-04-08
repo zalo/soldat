@@ -230,13 +230,13 @@ export function createGLBridge(memory, canvas) {
     glBlendFunc:  (s, d) => gl.blendFunc(s, d),
     glClearColor: (r, g, b, a) => {
       gl.clearColor(r, g, b, a);
-      if (!createGLBridge._logged) { console.log('[GL] glClearColor', r, g, b, a); createGLBridge._logged = true; }
+      createGLBridge._clearCount = (createGLBridge._clearCount || 0) + 1;
+      if (createGLBridge._clearCount <= 10 || createGLBridge._clearCount % 300 === 0)
+        console.log(`[GL] glClearColor #${createGLBridge._clearCount}: ${r.toFixed(3)},${g.toFixed(3)},${b.toFixed(3)},${a.toFixed(3)}`);
     },
     glClear:      (mask) => {
-      // Flush any accumulated GL errors that could poison subsequent draw calls
       while (gl.getError() !== 0) {}
       gl.clear(mask);
-      if (!createGLBridge._loggedClear) { console.log('[GL] glClear', mask); createGLBridge._loggedClear = true; }
     },
     glGetError:   () => gl.getError(),
     glViewport:   (x, y, w, h) => gl.viewport(x, y, w, h),

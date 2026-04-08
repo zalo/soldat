@@ -1,0 +1,4 @@
+*.smod
+node_modules
+build
+test
