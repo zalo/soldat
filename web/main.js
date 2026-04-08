@@ -595,6 +595,13 @@ async function main() {
   wasmInstance = instance;
   setGlobalWasmInstance(instance);
 
+  // Wire up touch-to-cursor for mobile (input.js reads this from canvas)
+  if (instance.exports.web_set_cursor) {
+    canvas._wasmSetCursor = (normX, normY) => {
+      instance.exports.web_set_cursor(normX, normY);
+    };
+  }
+
   // 6. Initialize game
   // _start runs: RTL init → unit init sections → main block (calls StartGame)
   // → Halt(0) → proc_exit. We throw in proc_exit to prevent RTL finalization,

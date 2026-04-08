@@ -114,11 +114,28 @@ export function createInputBridge(memory, canvas) {
     });
     setupTouchButtons();
 
-    // Canvas tap → mouse click (for weapon menu, UI interactions)
+    // Canvas tap → mouse position + click (for weapon menu, UI interactions)
+    // web_set_cursor is wired up by main.js after WASM instantiation
     canvas.addEventListener('touchstart', (e) => {
       if (!keyStatePtr) return;
+      const touch = e.changedTouches[0];
+      if (touch && canvas._wasmSetCursor) {
+        const rect = canvas.getBoundingClientRect();
+        const normX = (touch.clientX - rect.left) / rect.width;
+        const normY = (touch.clientY - rect.top) / rect.height;
+        canvas._wasmSetCursor(normX, normY);
+      }
       const mem = new Uint8Array(memory.buffer);
       mem[keyStatePtr + MOUSE_LEFT] = 1;
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+      const touch = e.changedTouches[0];
+      if (touch && canvas._wasmSetCursor) {
+        const rect = canvas.getBoundingClientRect();
+        const normX = (touch.clientX - rect.left) / rect.width;
+        const normY = (touch.clientY - rect.top) / rect.height;
+        canvas._wasmSetCursor(normX, normY);
+      }
     }, { passive: true });
     canvas.addEventListener('touchend', () => {
       if (!keyStatePtr) return;

@@ -193,9 +193,21 @@ begin Result := CameraX; end;
 function web_get_camera_y(): Single; cdecl; export;
 begin Result := CameraY; end;
 
+// Set cursor position from touch coordinates (0..1 normalized)
+procedure web_set_cursor(normX, normY: Single); cdecl; export;
+begin
+  mx := normX * GameWidth;
+  my := normY * GameHeight;
+end;
+
+function web_get_game_width(): LongInt; cdecl; export;
+begin Result := GameWidth; end;
+function web_get_game_height(): LongInt; cdecl; export;
+begin Result := GameHeight; end;
+
 exports web_init, web_tick, web_alloc, web_free, web_resize, join_room, web_spawn_offline,
   web_get_my_sprite, web_get_map_change_counter, web_get_requesting_game, web_get_connection_state,
-  web_get_camera_x, web_get_camera_y;
+  web_get_camera_x, web_get_camera_y, web_set_cursor, web_get_game_width, web_get_game_height;
 {$ENDIF}
 
 begin
