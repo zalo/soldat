@@ -719,24 +719,6 @@ async function main() {
         console.error(`[CRASH] web_tick #${tickCount}:`, e?.message || e, e?.stack?.split('\n').slice(0,3).join(' | '));
       }
       tickCount++;
-      if (tickCount <= 3 || tickCount % 300 === 0) {
-        const mySprite = instance.exports.web_get_my_sprite?.() ?? -1;
-        const gl = canvas.getContext('webgl2');
-        // If WASM rendering failed, draw a test pattern from JS to prove GL works
-        if (gl && mySprite > 0 && tickCount > 100) {
-          // Force a visible clear from JS side to prove canvas + GL work
-          gl.clearColor(0.5, 0.2, 0.8, 1.0); // purple
-          gl.clear(gl.COLOR_BUFFER_BIT);
-        }
-        let px = [0,0,0,0];
-        if (gl) {
-          const buf = new Uint8Array(4);
-          gl.readPixels(canvas.width/2|0, canvas.height/2|0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-          px = [...buf];
-        }
-        const cp = wasmCheckpoint;
-        console.log(`[game] tick=${tickCount} mySprite=${mySprite} checkpoint=${cp} px=[${px}] sz=${canvas.width}x${canvas.height}`);
-      }
     }
     requestAnimationFrame(frame);
   }

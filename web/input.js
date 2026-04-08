@@ -113,6 +113,18 @@ export function createInputBridge(memory, canvas) {
       view[aimStickPtr + 1] = sy;
     });
     setupTouchButtons();
+
+    // Canvas tap → mouse click (for weapon menu, UI interactions)
+    canvas.addEventListener('touchstart', (e) => {
+      if (!keyStatePtr) return;
+      const mem = new Uint8Array(memory.buffer);
+      mem[keyStatePtr + MOUSE_LEFT] = 1;
+    }, { passive: true });
+    canvas.addEventListener('touchend', () => {
+      if (!keyStatePtr) return;
+      const mem = new Uint8Array(memory.buffer);
+      mem[keyStatePtr + MOUSE_LEFT] = 0;
+    });
   }
 
   function setupJoystick(zoneId, knobId, onMove) {
